@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Τσακ — καρνέ προπόνησης</title>
+<title>Καρνέ προπόνησης</title>
 <meta name="description" content="Καταγραφή προπόνησης και προόδου για αθλητικό, γραμμωμένο σώμα. Full-body 3 φορές την εβδομάδα με αυτόματη προοδευτική επιβάρυνση.">
 <meta name="theme-color" content="#0a0a0a">
-<meta name="application-name" content="Τσακ">
+<meta name="application-name" content="Καρνέ προπόνησης">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Τσακ">
+<meta name="apple-mobile-web-app-title" content="Καρνέ προπόνησης">
 <link rel="manifest" href="../manifest.json">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20512%20512'%3E%3Crect%20width='512'%20height='512'%20rx='114'%20fill='%230a0a0a'/%3E%3Cpolygon%20points='296,48%20168,288%20240,288%20208,464%20344,224%20272,224'%20fill='%23e8ff47'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="../icon-180.png">
@@ -48,27 +48,31 @@
 
 <div class="shell">
 
+  <!-- Το όνομα και το λογότυπο έρχονται από τις ρυθμίσεις του
+       διαχειριστή. Ό,τι υπάρχει εδώ είναι μόνο εφεδρεία για όσο
+       φορτώνει. -->
   <header class="masthead">
     <div class="brand">
-      <svg class="brand-mark" width="32" height="32" viewBox="0 0 512 512" aria-hidden="true">
+      <img class="brand-mark" id="brand-logo" alt="" width="32" height="32" hidden>
+      <svg class="brand-mark" id="brand-mark-fallback" width="32" height="32" viewBox="0 0 512 512" aria-hidden="true">
         <rect x="6" y="6" width="500" height="500" rx="114" fill="#0a0a0a" stroke="#1e1e1e" stroke-width="12"/>
         <polygon points="296,48 168,288 240,288 208,464 344,224 272,224" fill="#e8ff47"/>
       </svg>
-      <div>
+      <div class="brand-text">
         <span class="brand-sub">Workout Tracker</span>
-        <h1 class="wordmark">Τσακ</h1>
+        <h1 class="wordmark" id="brand-name">Καρνέ προπόνησης</h1>
       </div>
     </div>
-    <div class="masthead-right">
-      <div class="masthead-meta">
-        <strong id="week-count">—</strong>
-        <span id="week-label">ξεκίνα σήμερα</span><span class="sync-dot" id="sync-dot" aria-hidden="true"></span>
-      </div>
-      <a class="switch-btn" id="client-link" href="../" aria-label="Άνοιγμα κρατήσεων" title="Κρατήσεις">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 8h13l-3-3M20 16H7l3 3"/>
-        </svg>
-      </a>
+
+    <a class="switch-btn" id="client-link" href="../" aria-label="Άνοιγμα κρατήσεων" title="Κρατήσεις">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 8h13l-3-3M20 16H7l3 3"/>
+      </svg>
+    </a>
+
+    <div class="masthead-meta">
+      <strong id="week-count">—</strong>
+      <span id="week-label">ξεκίνα σήμερα</span><span class="sync-dot" id="sync-dot" aria-hidden="true"></span>
     </div>
   </header>
 

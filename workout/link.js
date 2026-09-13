@@ -52,6 +52,26 @@ async function rpc(fn, args) {
   return text ? JSON.parse(text) : null;
 }
 
+/* Όνομα και λογότυπο όπως τα έχει ορίσει ο διαχειριστής.
+ *
+ * Είναι η ίδια δημόσια ρύθμιση που διαβάζει και η εφαρμογή κρατήσεων,
+ * οπότε ό,τι αλλάξει εκεί φαίνεται κι εδώ χωρίς δεύτερη ρύθμιση.
+ * Δεν χρειάζεται σύνδεση: το app_settings είναι ανοιχτό στον anon.
+ *
+ * Αν ο διακομιστής αργήσει πάνω από 4 δευτερόλεπτα, επιστρέφει null
+ * και η εφαρμογή κρατάει το εφεδρικό όνομα αντί να περιμένει.
+ */
+export async function fetchBrand() {
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 4000));
+  const call = rpc('app_settings', {}).catch(() => null);
+  const data = await Promise.race([call, timeout]);
+  if (!data || typeof data !== 'object') return null;
+  return {
+    gym_name: data.gym_name || '',
+    logo_url: data.logo_url || ''
+  };
+}
+
 /* { goals: ['weight_loss', ...], other: 'κείμενο' } — ή null αν δεν
    έχει συνδεθεί κανείς. */
 export async function fetchGoals() {

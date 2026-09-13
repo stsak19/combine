@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Τσακ — καρνέ προπόνησης
+   Καρνέ προπόνησης
    Παλέτα: σκούρο φόντο #0a0a0a με lime accent #e8ff47.
    Το σχέδιο και οι διαστάσεις μένουν ίδια — αλλάζουν μόνο τα χρώματα.
    ========================================================================== */
@@ -83,10 +83,13 @@ button {
 
 /* ---------- Κεφαλίδα ---------- */
 
+/* Τρεις στήλες αντί για δύο άκρα: οι δύο εξωτερικές μοιράζονται ίσα
+   τον χώρο, οπότε το κουμπί της μεσαίας κάθεται στο οπτικό κέντρο
+   της κεφαλίδας ό,τι κι αν γράφει δεξιά κι αριστερά. */
 .masthead {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 18px 0 14px;
   border-bottom: 2px solid var(--accent);
@@ -99,7 +102,18 @@ button {
   min-width: 0;
 }
 
-.brand-mark { display: block; flex-shrink: 0; }
+/* Το λογότυπο το ανεβάζει ο διαχειριστής, οπότε μπορεί να έχει
+   οποιαδήποτε αναλογία: το κουτί μένει σταθερό και η εικόνα χωράει
+   μέσα του χωρίς να παραμορφώνεται. */
+.brand-mark {
+  display: block;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.brand-mark[hidden] { display: none; }
 
 .brand-sub {
   display: block;
@@ -110,17 +124,27 @@ button {
   margin-bottom: 1px;
 }
 
+/* Το όνομα δεν το ξέρουμε από πριν — μπορεί να είναι μια λέξη ή
+   «Athletic Performance Center». Μικραίνει μόνο του και κόβεται με
+   αποσιωπητικά αντί να σπρώξει το κουμπί από το κέντρο. */
 .wordmark {
   font-family: var(--brand);
   font-weight: 700;
-  font-size: 29px;
+  font-size: clamp(19px, 6vw, 29px);
   letter-spacing: 0.01em;
-  line-height: 1;
+  line-height: 1.05;
   margin: 0;
   color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.brand-text { min-width: 0; }
+
 .masthead-meta {
+  grid-column: 3;
+  justify-self: end;
   font-size: 13px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -854,8 +878,13 @@ button {
 }
 
 /* Αντίστροφα από την εφαρμογή κρατήσεων: εκεί μαύρο κουμπί σε άσπρη
-   σελίδα, εδώ άσπρο σε μαύρη. Ίδιο μέγεθος, ίδιο σχήμα. */
+   σελίδα, εδώ άσπρο σε μαύρη. Ίδιο μέγεθος, ίδιο σχήμα.
+   Μεσαία στήλη της κεφαλίδας: κεντραρισμένο και στους δύο άξονες,
+   και το βελάκι κεντραρισμένο μέσα του. */
 .switch-btn {
+  grid-column: 2;
+  justify-self: center;
+  align-self: center;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -868,6 +897,8 @@ button {
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
 }
+
+.switch-btn svg { display: block; }
 
 .switch-btn:active { opacity: 0.7; }
 

@@ -1,11 +1,12 @@
 import {
   buildProgram, defaultConfig, configFromGoals,
   PRESETS, TEMPLATES, EMPHASIS_LIST, ALIASES,
-  WEEKLY_VOLUME, NUTRITION, GUIDE, ALTERNATIVES, GROUPS
+  WEEKLY_VOLUME, NUTRITION, GUIDE, ALTERNATIVES, GROUPS,
+  GOAL_LABELS
 } from './data.js';
 import * as store from './storage.js';
 import { lineChart, barRow } from './charts.js';
-import { readClientSession, clientName, fetchGoals, CLIENT_URL } from './link.js';
+import { readClientSession, clientName, fetchGoals, fetchBrand, CLIENT_URL } from './link.js';
 
 /* Το πρόγραμμα φτιάχνεται στην εκκίνηση από τις ρυθμίσεις και
    ξαναφτιάχνεται όποτε αλλάξουν. Μέχρι τότε είναι άδειο. */
@@ -197,6 +198,69 @@ function weekNumber() {
   const first = new Date(done[0].date + 'T00:00:00');
   const diff = Date.now() - first.getTime();
   return Math.floor(diff / (7 * 864e5)) + 1;
+}
+
+/* ---------- Ταυτότητα από τις ρυθμίσεις του διαχειριστή ----------
+   Τίποτα δεν είναι καρφωτό εδώ. Το όνομα και το λογότυπο τα ορίζει ο
+   διαχειριστής στην εφαρμογή κρατήσεων και τα διαβάζουμε από την ίδια
+   δημόσια ρύθμιση (app_settings), ώστε οι δύο εφαρμογές να δείχνουν
+   πάντα το ίδιο πράγμα. Μέχρι να απαντήσει ο διακομιστής μένει το
+   ουδέτερο εφεδρικό όνομα. */
+
+const BRAND_FALLBACK = 'Καρνέ προπόνησης';
+let BRAND = { name: BRAND_FALLBACK, logo: '' };
+
+function setLinkIcon(rel, href) {
+  let el = document.querySelector('link[rel="' + rel + '"]');
+  if (!href) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('link'); el.rel = rel; document.head.appendChild(el); }
+  el.href = href;
+}
+
+function paintBrand() {
+  const name = BRAND.name || BRAND_FALLBACK;
+
+  const word = $('#brand-name');
+  if (word) word.textContent = name;
+
+  document.title = name + ' — καρνέ προπόνησης';
+
+  const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (meta) meta.setAttribute('content', name);
+  const appName = document.querySelector('meta[name="application-name"]');
+  if (appName) appName.setAttribute('content', name);
+
+  /* Το λογότυπο είναι data URL μέσα στη βάση. Όσο δεν υπάρχει, μένει
+     το απλό εικονίδιο του κειμένου αντί για σπασμένη εικόνα. */
+  const mark = $('#brand-logo');
+  const fallbackMark = $('#brand-mark-fallback');
+  if (mark) {
+    if (BRAND.logo) {
+      mark.src = BRAND.logo;
+      mark.hidden = false;
+      if (fallbackMark) fallbackMark.hidden = true;
+    } else {
+      mark.removeAttribute('src');
+      mark.hidden = true;
+      if (fallbackMark) fallbackMark.hidden = false;
+    }
+  }
+
+  if (BRAND.logo) {
+    setLinkIcon('icon', BRAND.logo);
+    setLinkIcon('apple-touch-icon', BRAND.logo);
+  }
+}
+
+/* Δεν μπλοκάρει τίποτα: αν ο διακομιστής αργήσει ή αποτύχει, η
+   εφαρμογή δουλεύει κανονικά με το εφεδρικό όνομα. */
+async function loadBrand() {
+  try {
+    const data = await fetchBrand();
+    if (data && data.gym_name) BRAND.name = String(data.gym_name).trim();
+    if (data && data.logo_url) BRAND.logo = data.logo_url;
+  } catch (e) { /* αγνόησε */ }
+  paintBrand();
 }
 
 /* ---------- Απόδοση: κεφαλίδα ---------- */
@@ -1576,7 +1640,7 @@ function reportHTML() {
         .join('')
     : '<p class="empty">Δεν υπάρχει ακόμη ιστορικό.</p>';
 
-  const title = `Τσακ — αναφορά προπόνησης ${today()}`;
+  const title = `${BRAND.name || BRAND_FALLBACK} — αναφορά προπόνησης ${today()}`;
 
   return `<!DOCTYPE html>
 <html lang="el"><head><meta charset="utf-8">
@@ -1658,8 +1722,8 @@ function reportHTML() {
 </div>
 <div class="page">
   <header class="head">
-    ${MARK_SVG}
-    <div><h1>Τσακ</h1><p class="kicker">Αναφορά προπόνησης</p></div>
+    ${BRAND.logo ? `<img class="mark" src="${esc(BRAND.logo)}" alt="" width="46" height="46">` : MARK_SVG}
+    <div><h1>${esc(BRAND.name || BRAND_FALLBACK)}</h1><p class="kicker">Αναφορά προπόνησης</p></div>
     <div class="issued">Εκδόθηκε<b>${esc(longDate(today()))}</b></div>
   </header>
   <p class="period">${esc(period)}</p>
@@ -1683,7 +1747,7 @@ function reportHTML() {
   <h2>Ημερολόγιο προπονήσεων</h2>
   ${diary}
 
-  <footer>Τσακ — καρνέ προπόνησης. Τα νούμερα είναι όσα κατέγραψες εσύ. Δεν είναι ιατρική συμβουλή.</footer>
+  <footer>${esc(BRAND.name || BRAND_FALLBACK)} — καρνέ προπόνησης. Τα νούμερα είναι όσα κατέγραψες εσύ. Δεν είναι ιατρική συμβουλή.</footer>
 </div>
 <script>setTimeout(function(){ try { window.focus(); window.print(); } catch (e) {} }, 600);<\/script>
 </body></html>`;
@@ -1836,6 +1900,11 @@ renderGuide();
 loadProfile();
 renderAll();
 renderSettings();
+
+/* Το όνομα και το λογότυπο του διαχειριστή. Μπαίνει αμέσως το
+   εφεδρικό, ώστε να μη μείνει κενή η κεφαλίδα όσο φορτώνει. */
+paintBrand();
+loadBrand();
 
 /* Πρώτος γύρος συγχρονισμού μόλις σταθεί η οθόνη. */
 store.syncNow();
