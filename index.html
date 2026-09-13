@@ -372,39 +372,6 @@ const fmtClock = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 const addMin = (d, n) => new Date(d.getTime() + n * 60000);
 
 /* ============================================================
-   Στόχοι πελάτη
-   Τα κλειδιά είναι ίδια με τη λίστα goal_keys() στη βάση. Αν
-   προστεθεί στόχος, θέλει αλλαγή και στα δύο — και στο admin.html.
-   ============================================================ */
-const GOAL_GROUPS = [
-  ["Σώμα και εμφάνιση", [
-    ["weight_loss", "Απώλεια βάρους"],
-    ["muscle_gain", "Αύξηση μυϊκής μάζας"],
-    ["toning", "Γράμμωση / σύσφιξη"],
-    ["maintain", "Διατήρηση της φόρμας μου"],
-  ]],
-  ["Απόδοση", [
-    ["strength", "Αύξηση δύναμης"],
-    ["endurance", "Καλύτερη αντοχή"],
-    ["flexibility", "Ευλυγισία και κινητικότητα"],
-    ["core", "Ισορροπία και σταθερότητα κορμού"],
-    ["event_prep", "Προετοιμασία για αγώνα"],
-  ]],
-  ["Υγεία και καθημερινότητα", [
-    ["posture", "Καλύτερη στάση σώματος"],
-    ["pain_relief", "Λιγότεροι πόνοι στη μέση ή τον αυχένα"],
-    ["injury_recovery", "Επιστροφή μετά από τραυματισμό"],
-    ["stress", "Λιγότερο άγχος, καλύτερη διάθεση"],
-    ["sleep", "Καλύτερος ύπνος"],
-    ["energy", "Ενέργεια για την καθημερινότητα"],
-    ["routine", "Σταθερή ρουτίνα άσκησης"],
-  ]],
-  ["Κοινωνικό", [
-    ["classes", "Ομαδικά μαθήματα και παρέα"],
-  ]],
-];
-
-/* ============================================================
    Ακύρωση από τη διαχείριση
    Κρατάμε στη συσκευή ποιες κρατήσεις ξέραμε. Αν κάποια χαθεί
    χωρίς να την ακυρώσει ο ίδιος ο πελάτης, την ακύρωσε το
@@ -843,7 +810,6 @@ function PrivacyPolicy({ onClose }) {
             ούτε η διαχείριση — γι' αυτό δεν σου τον στέλνει, σου δίνει καινούριο.
           </p>
           <p>Τις κρατήσεις, τις ακυρώσεις και τις προσελεύσεις σου στο γυμναστήριο.</p>
-          <p>Τους στόχους σου, αν συμπληρώσεις την αντίστοιχη ενότητα.</p>
           <p>Τα μηνύματα που ανταλλάσσεις με το γυμναστήριο στα «Μηνύματα».</p>
           <p>
             Έναν κωδικό της συσκευής σου, μόνο αν ενεργοποιήσεις τις ειδοποιήσεις.
@@ -1223,14 +1189,14 @@ function ChatIcon() {
   );
 }
 
-/* Ο διακόπτης προς την προπόνηση. Κίτρινο πάνω σε μαύρο — το κίτρινο
-   είναι του Τσακ, ώστε να φαίνεται αμέσως πού πάει. */
-function SwitchIcon() {
+/* Ο κεραυνός προς την προπόνηση. Κίτρινο πάνω σε μαύρο — το ίδιο
+   σήμα που έχει και η εφαρμογή προπόνησης, ώστε να φαίνεται αμέσως
+   πού πάει. */
+function BoltIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="none"
-      stroke="#E8FF47" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 8h13M14 5l3 3-3 3" />
-      <path d="M20 16H7M10 13l-3 3 3 3" />
+    <svg viewBox="0 0 24 24" width="21" height="21" fill="#E8FF47"
+      stroke="#E8FF47" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2 4 13.5h6.2L9 22l9-11.5h-6.2L13 2z" />
     </svg>
   );
 }
@@ -1477,8 +1443,6 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
           Το «Αυτόματο» ακολουθεί τη ρύθμιση του κινητού σου.
         </p>
       </div>
-
-      <GoalsPanel session={session} flash={flash} />
 
       <PushPanel session={session} flash={flash} />
 
@@ -1739,102 +1703,6 @@ function AccountPanel({ session, flash, onDeleted }) {
   );
 }
 
-/* Τι θέλει να πετύχει ο πελάτης. Πολλαπλή επιλογή, συν ένα
-   ελεύθερο πεδίο για ό,τι δεν χωράει στη λίστα. Τα ίδια τα
-   βλέπει η διαχείριση στην ενότητα «Στόχοι πελατών». */
-function GoalsPanel({ session, flash }) {
-  const [picked, setPicked] = useState([]);
-  const [other, setOther] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data, error } = await sb.rpc("my_goals", { p_client_id: session.clientId });
-      if (!alive) return;
-      if (!error && data) {
-        setPicked(Array.isArray(data.goals) ? data.goals : []);
-        setOther(data.other || "");
-      }
-      setLoaded(true);
-    })();
-    return () => { alive = false; };
-  }, [session.clientId]);
-
-  const toggle = (key) => {
-    setDirty(true);
-    setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
-  };
-
-  const save = async () => {
-    setSaving(true);
-    const { data, error } = await sb.rpc("save_goals", {
-      p_client_id: session.clientId,
-      p_goals: picked,
-      p_other: other.trim() || null,
-    });
-    setSaving(false);
-    if (error || !data || data.ok !== true) { flash("Δεν αποθηκεύτηκε"); return; }
-    setDirty(false);
-    flash("Οι στόχοι σου αποθηκεύτηκαν");
-  };
-
-  return (
-    <div className="mt-10 border border-black p-4">
-      <div className="f-display text-[14px] font-bold uppercase tracking-wide">Οι στόχοι μου</div>
-      <p className="f-text mt-2 text-[13px] leading-relaxed text-neutral-600">
-        Διάλεξε όσα θέλεις. Βοηθάει το γυμναστήριο να σε καθοδηγήσει καλύτερα.
-      </p>
-
-      {!loaded ? (
-        <div className="f-text py-6 text-[13px] text-neutral-400">Φόρτωση…</div>
-      ) : (
-        <>
-          {GOAL_GROUPS.map(([title, items]) => (
-            <div key={title} className="mt-5">
-              <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">{title}</div>
-              <div className="mt-2 space-y-2">
-                {items.map(([key, label]) => (
-                  <button key={key} onClick={() => toggle(key)}
-                    className="flex w-full items-start gap-3 text-left">
-                    <span className={`mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center border border-black ${
-                      picked.includes(key) ? "bg-black" : "bg-white"}`}>
-                      {picked.includes(key) && (
-                        <span className="f-display text-[13px] font-bold leading-none text-white">✓</span>
-                      )}
-                    </span>
-                    <span className="f-text text-[14px] leading-snug">{label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          <div className="mt-6">
-            <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-              Ο δικός σου στόχος
-            </div>
-            <input value={other} maxLength={120}
-              onChange={(e) => { setOther(e.target.value); setDirty(true); }}
-              placeholder="Γράψε τον εδώ"
-              className="f-text mt-2 h-12 w-full border border-black bg-white px-3 text-[14px] outline-none" />
-          </div>
-
-          <div className="mt-5">
-            <Button size="lg" disabled={saving || !dirty} onClick={save}>
-              {saving ? "Αποθήκευση…" : dirty ? "Αποθήκευση στόχων" : "Αποθηκευμένο"}
-            </Button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-
-
 function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSignedUp, flash, theme, setTheme }) {
   const [tab, setTab] = useState("book");
   const [askPush, setAskPush] = useState(false);
@@ -2036,6 +1904,10 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <a href={WORKOUT_URL} aria-label="Άνοιγμα προπόνησης" title="Προπόνηση"
+            className="flex h-11 w-11 shrink-0 items-center justify-center border border-black bg-black">
+            <BoltIcon />
+          </a>
           {chatOn && (
             <button aria-label="Μηνύματα"
               onClick={() => {
@@ -2053,10 +1925,6 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
               )}
             </button>
           )}
-          <a href={WORKOUT_URL} aria-label="Άνοιγμα προπόνησης" title="Προπόνηση"
-            className="flex h-11 w-11 shrink-0 items-center justify-center border border-black bg-black">
-            <SwitchIcon />
-          </a>
           <button onClick={() => setScanOpen(true)} aria-label="Σάρωση QR"
             className="flex h-11 w-11 shrink-0 items-center justify-center border border-black bg-white text-black">
             <ScanIcon />
