@@ -566,8 +566,45 @@ function pickAvailable(id, equipment, seen) {
 }
 
 export function defaultConfig() {
-  return { preset: 'recomp', days: 3, equipment: 'gym', emphasis: [], source: 'default' };
+  return { preset: 'recomp', days: 3, equipment: 'gym', emphasis: [], cardio: 'none', source: 'default' };
 }
+
+/* ---------- Περπάτημα και καρντιό ----------
+   Δεν μπαίνουν στα σετ: δεν έχουν κιλά και επαναλήψεις να
+   καταγράψεις. Μπαίνουν ως οδηγία κάτω από τις ασκήσεις της ημέρας,
+   γιατί εκεί τα βλέπεις τη στιγμή που τα χρειάζεσαι. */
+export const CARDIO_OPTIONS = [
+  { id: 'none', label: 'Τίποτα — μόνο βάρη' },
+  { id: 'walk', label: 'Περπάτημα' },
+  { id: 'liss', label: 'Καρντιό (ποδήλατο, ελλειπτικό)' },
+  { id: 'both', label: 'Περπάτημα και καρντιό' }
+];
+
+export const CARDIO = {
+  walk: {
+    title: 'Περπάτημα',
+    lines: [
+      '8.000–10.000 βήματα την ημέρα, όποτε σου βολεύει.',
+      'Είναι ο πιο ανώδυνος τρόπος να κάψεις παραπάνω: δεν κουράζει τα πόδια για την επόμενη προπόνηση.'
+    ]
+  },
+  liss: {
+    title: 'Καρντιό',
+    lines: [
+      '20–40 λεπτά, μία έως τρεις φορές την εβδομάδα, σε ρυθμό που σου επιτρέπει να μιλάς.',
+      'Ποδήλατο ή ελλειπτικό αντί για τρέξιμο — κουράζει λιγότερο τα πόδια.',
+      'Αν το κάνεις την ίδια μέρα με τα βάρη, πρώτα τα βάρη.'
+    ]
+  },
+  both: {
+    title: 'Περπάτημα και καρντιό',
+    lines: [
+      '8.000–10.000 βήματα την ημέρα ως βάση.',
+      'Συν 20–40 λεπτά ποδήλατο ή ελλειπτικό, μία έως τρεις φορές την εβδομάδα.',
+      'Αν το κάνεις την ίδια μέρα με τα βάρη, πρώτα τα βάρη.'
+    ]
+  }
+};
 
 /* Η άσκηση όπως θα τη δει ο χρήστης: κατάλογος + το preset από πάνω. */
 function shape(id, preset) {
@@ -661,6 +698,7 @@ export function buildProgram(raw) {
     preset: cfg.preset,
     label: `${preset.label} · ${tpl.label}`,
     note: preset.note || tpl.note,
+    cardio: CARDIO[cfg.cardio] || null,
     nutritionGoal: preset.nutrition
   };
 }

@@ -252,6 +252,36 @@ button {
   font-size: 14px;
 }
 
+/* ---------- Περπάτημα και καρντιό ---------- */
+
+.cardio-note {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 12px;
+}
+
+.cardio-note h3 {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 6px;
+}
+
+.cardio-note p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+  opacity: 0.75;
+}
+
+.cardio-note p:last-child { margin-bottom: 0; }
+
 /* ---------- Κάρτα άσκησης ---------- */
 
 .exercise {
@@ -563,7 +593,7 @@ button {
   max-width: 560px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .tab {

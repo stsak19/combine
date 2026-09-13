@@ -1,12 +1,12 @@
 import {
-  buildProgram, defaultConfig, configFromGoals,
+  buildProgram, defaultConfig,
   PRESETS, TEMPLATES, EMPHASIS_LIST, ALIASES,
-  WEEKLY_VOLUME, NUTRITION, GUIDE, ALTERNATIVES, GROUPS,
-  GOAL_LABELS
+  WEEKLY_VOLUME, NUTRITION, ALTERNATIVES, GROUPS,
+  CARDIO_OPTIONS
 } from './data.js';
 import * as store from './storage.js';
 import { lineChart, barRow } from './charts.js';
-import { readClientSession, clientName, fetchGoals, fetchBrand, CLIENT_URL } from './link.js';
+import { fetchBrand, CLIENT_URL } from './link.js';
 
 /* Το πρόγραμμα φτιάχνεται στην εκκίνηση από τις ρυθμίσεις και
    ξαναφτιάχνεται όποτε αλλάξουν. Μέχρι τότε είναι άδειο. */
@@ -129,8 +129,7 @@ const state = {
   sessions: store.read('sessions', []),
   bodyweight: store.read('bodyweight', []),
   measurements: store.read('measurements', []),
-  profile: store.read('profile', null),
-  goals: null
+  profile: store.read('profile', null)
 };
 
 const save = (key) => store.write(key, state[key]);
@@ -230,19 +229,18 @@ function paintBrand() {
   const appName = document.querySelector('meta[name="application-name"]');
   if (appName) appName.setAttribute('content', name);
 
-  /* Το λογότυπο είναι data URL μέσα στη βάση. Όσο δεν υπάρχει, μένει
-     το απλό εικονίδιο του κειμένου αντί για σπασμένη εικόνα. */
+  /* Το λογότυπο είναι data URL μέσα στη βάση. Όσο δεν υπάρχει — ή αν
+     δεν φορτώσει — η κεφαλίδα μένει μόνο με το όνομα, χωρίς κενό
+     τετράγωνο στη θέση της εικόνας. */
   const mark = $('#brand-logo');
-  const fallbackMark = $('#brand-mark-fallback');
   if (mark) {
+    mark.onerror = () => { mark.removeAttribute('src'); mark.hidden = true; };
     if (BRAND.logo) {
       mark.src = BRAND.logo;
       mark.hidden = false;
-      if (fallbackMark) fallbackMark.hidden = true;
     } else {
       mark.removeAttribute('src');
       mark.hidden = true;
-      if (fallbackMark) fallbackMark.hidden = false;
     }
   }
 
@@ -399,6 +397,18 @@ function renderTrain() {
   add.textContent = '+ Πρόσθεσε άσκηση σε αυτή την ημέρα';
   add.addEventListener('click', () => addExercise(state.day));
   list.appendChild(add);
+
+  /* Περπάτημα και καρντιό: οδηγία, όχι άσκηση με σετ. Φαίνεται μόνο
+     αν το έχει διαλέξει στις Ρυθμίσεις. */
+  const cardio = BUILD && BUILD.cardio;
+  if (cardio) {
+    const box = document.createElement('div');
+    box.className = 'cardio-note';
+    box.innerHTML =
+      `<h3>${esc(cardio.title)}</h3>` +
+      cardio.lines.map((l) => `<p>${esc(l)}</p>`).join('');
+    list.appendChild(box);
+  }
 
   const finish = $('#finish-session');
   finish.textContent =
@@ -1064,22 +1074,6 @@ function renderNutrition() {
   `;
 }
 
-/* ---------- Οδηγός ---------- */
-
-function renderGuide() {
-  const host = $('#guide-list');
-  host.innerHTML = '';
-  GUIDE.forEach((section, i) => {
-    const d = document.createElement('details');
-    d.className = 'accordion';
-    if (i === 0) d.open = true;
-    d.innerHTML =
-      `<summary>${section.title}</summary>` +
-      `<div class="content">${section.body.map((p) => `<p>${p}</p>`).join('')}</div>`;
-    host.appendChild(d);
-  });
-}
-
 /* ---------- Ρυθμίσεις ---------- */
 
 function renderSettings() {
@@ -1132,6 +1126,13 @@ function renderConfig() {
     .map((e) => `<option value="${e.id}"${e.id === draft.equipment ? ' selected' : ''}>${esc(e.label)}</option>`)
     .join('');
 
+  const cardioSel = $('#cfg-cardio');
+  if (cardioSel) {
+    cardioSel.innerHTML = CARDIO_OPTIONS
+      .map((c) => `<option value="${c.id}"${c.id === (draft.cardio || 'none') ? ' selected' : ''}>${esc(c.label)}</option>`)
+      .join('');
+  }
+
   const chips = $('#cfg-emphasis');
   chips.innerHTML = '';
   EMPHASIS_LIST.forEach((e) => {
@@ -1171,68 +1172,6 @@ function renderConfig() {
   const apply = $('#cfg-apply');
   apply.disabled = same;
   apply.textContent = same ? 'Αυτό είναι ήδη το πρόγραμμά σου' : 'Φτιάξε το πρόγραμμά μου';
-
-  renderGoalLink();
-}
-
-function renderGoalLink() {
-  const host = $('#goal-link');
-  if (!host) return;
-  const session = readClientSession();
-  const saved = state.goals;
-
-  if (!session) {
-    host.innerHTML =
-      '<div class="empty">Δεν βρέθηκε σύνδεση πελάτη σε αυτή τη συσκευή. Συνδέσου στην εφαρμογή κρατήσεων και οι στόχοι σου θα έρθουν εδώ μόνοι τους.</div>';
-    return;
-  }
-
-  const chips = (saved && saved.goals.length)
-    ? saved.goals.map((g) => `<span class="goal-chip">${esc(GOAL_LABELS[g] || g)}</span>`).join('')
-    : '<span class="goal-chip goal-chip-empty">Δεν έχεις δηλώσει στόχους ακόμα</span>';
-
-  host.innerHTML =
-    `<div class="goal-head">Στόχοι από την εφαρμογή κρατήσεων${clientName(session) ? ' · ' + esc(clientName(session)) : ''}</div>` +
-    `<div class="goal-chips">${chips}</div>` +
-    (saved && saved.other ? `<p class="hint">Δικός σου στόχος: ${esc(saved.other)}</p>` : '') +
-    '<p class="hint">Τους αλλάζεις στην εφαρμογή κρατήσεων, στις Ρυθμίσεις → Οι στόχοι μου.</p>';
-}
-
-/* Φέρνει τους στόχους από τη βάση και τους μεταφράζει σε ρυθμίσεις. */
-async function pullGoals({ silent } = {}) {
-  ensureDraft();
-  const status = $('#goal-status');
-  try {
-    const res = await fetchGoals();
-    if (!res) { renderGoalLink(); return null; }
-    state.goals = res;
-    const suggestion = configFromGoals(res.goals);
-    if (res.goals.length) {
-      draft = {
-        ...draft,
-        preset: suggestion.preset,
-        emphasis: suggestion.emphasis,
-        source: 'goals'
-      };
-      if (!state.plan.config.daysTouched) {
-        draft.days = Math.max(Number(draft.days) || 3, PRESETS[suggestion.preset].days);
-      }
-    }
-    renderConfig();
-    if (status && !silent) {
-      setStatus(
-        status,
-        res.goals.length
-          ? 'Οι στόχοι σου ήρθαν. Δες την πρόταση πιο κάτω και πάτα «Φτιάξε το πρόγραμμά μου».'
-          : 'Δεν υπάρχουν δηλωμένοι στόχοι στην εφαρμογή κρατήσεων.',
-        true
-      );
-    }
-    return res;
-  } catch (e) {
-    if (status && !silent) setStatus(status, 'Δεν ήρθαν οι στόχοι: ' + e.message, false);
-    return null;
-  }
 }
 
 function applyConfig() {
@@ -1864,8 +1803,12 @@ if ($('#cfg-preset')) {
     draft.source = 'manual';
     renderConfig();
   });
+  $('#cfg-cardio').addEventListener('change', (e) => {
+    draft.cardio = e.target.value;
+    draft.source = 'manual';
+    renderConfig();
+  });
   $('#cfg-apply').addEventListener('click', applyConfig);
-  $('#goal-refresh').addEventListener('click', () => pullGoals({}));
   $('#client-link').href = CLIENT_URL;
 }
 
@@ -1873,7 +1816,7 @@ if ($('#cfg-preset')) {
 
 function showView(name) {
   state.view = name;
-  ['train', 'progress', 'nutrition', 'guide', 'settings'].forEach((v) => {
+  ['train', 'progress', 'nutrition', 'settings'].forEach((v) => {
     $('#view-' + v).hidden = v !== name;
   });
   $$('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.view === name)));
@@ -1896,7 +1839,6 @@ function renderAll() {
 rebuild();
 state.day = suggestedDay();
 fillNutritionSelects();
-renderGuide();
 loadProfile();
 renderAll();
 renderSettings();
@@ -1908,12 +1850,3 @@ loadBrand();
 
 /* Πρώτος γύρος συγχρονισμού μόλις σταθεί η οθόνη. */
 store.syncNow();
-
-/* Οι στόχοι από την εφαρμογή κρατήσεων. Την πρώτη φορά — όσο δηλαδή
-   το πρόγραμμα είναι ακόμα το προεπιλεγμένο — εφαρμόζονται μόνοι
-   τους. Μετά απλώς φαίνονται στις Ρυθμίσεις και αποφασίζει ο χρήστης. */
-pullGoals({ silent: true }).then((res) => {
-  if (!res || !res.goals.length) return;
-  if (state.plan.config.source && state.plan.config.source !== 'default') return;
-  applyConfig();
-});
