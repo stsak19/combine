@@ -59,9 +59,16 @@
         <h1 class="wordmark">Τσακ</h1>
       </div>
     </div>
-    <div class="masthead-meta">
-      <strong id="week-count">—</strong>
-      <span id="week-label">ξεκίνα σήμερα</span><span class="sync-dot" id="sync-dot" aria-hidden="true"></span>
+    <div class="masthead-right">
+      <div class="masthead-meta">
+        <strong id="week-count">—</strong>
+        <span id="week-label">ξεκίνα σήμερα</span><span class="sync-dot" id="sync-dot" aria-hidden="true"></span>
+      </div>
+      <a class="switch-btn" id="client-link" href="../" aria-label="Άνοιγμα κρατήσεων" title="Κρατήσεις">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 8h13l-3-3M20 16H7l3 3"/>
+        </svg>
+      </a>
     </div>
   </header>
 
@@ -212,6 +219,57 @@
       <p id="storage-mode"></p>
     </div>
 
+    <div class="panel" id="config-panel">
+      <h3>Ο στόχος και το πρόγραμμά μου</h3>
+
+      <div id="goal-link"></div>
+      <div class="btn-row">
+        <button class="btn btn-quiet" id="goal-refresh">Ανανέωση στόχων</button>
+      </div>
+      <div id="goal-status"></div>
+
+      <div class="field">
+        <label for="cfg-preset">Πρόγραμμα</label>
+        <select id="cfg-preset"></select>
+      </div>
+      <p class="hint" id="cfg-tagline"></p>
+
+      <div class="field-pair">
+        <div class="field">
+          <label for="cfg-days">Μέρες την εβδομάδα</label>
+          <select id="cfg-days"></select>
+        </div>
+        <div class="field">
+          <label for="cfg-equip">Εξοπλισμός</label>
+          <select id="cfg-equip"></select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Έμφαση</label>
+        <div class="chips" id="cfg-emphasis"></div>
+      </div>
+
+      <div id="cfg-preview"></div>
+      <button class="btn btn-primary btn-block" id="cfg-apply">Φτιάξε το πρόγραμμά μου</button>
+      <p class="hint">Το ιστορικό σου δεν χάνεται ποτέ. Κάθε άσκηση κρατάει τα κιλά της, ακόμα κι αν αλλάξεις εντελώς πρόγραμμα — και τα ξαναβρίσκει αν επιστρέψει αργότερα.</p>
+      <div id="cfg-status"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Οι αλλαγές μου στο πρόγραμμα</h3>
+      <div id="plan-list"></div>
+      <div class="btn-row">
+        <button class="btn btn-quiet" id="plan-reset">Επαναφορά όλων των ασκήσεων</button>
+      </div>
+      <p class="hint">Γυρνάει τις ασκήσεις όπως τις έφτιαξε το πρόγραμμα. Ο στόχος και οι μέρες μένουν όπως τα έχεις — και οι καταγραφές σου δεν πειράζονται.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Συγχρονισμός</h3>
+      <div id="sync-status"></div>
+    </div>
+
     <div class="panel">
       <h3>Τα δεδομένα σου</h3>
       <button class="btn btn-primary btn-block" id="export-btn">Εξαγωγή σε PDF</button>
@@ -237,7 +295,21 @@
 </div>
 
 <script type="module">
-  import('./app.js').catch(() => import('./assets/js/app.js'));
+  /* Αν κάτι δεν φορτώσει, φαίνεται στην οθόνη. Σιωπηλή αποτυχία
+     σημαίνει άδεια εφαρμογή χωρίς καμία εξήγηση. */
+  const boom = (msg) => {
+    const t = document.getElementById('day-title');
+    const list = document.getElementById('exercise-list');
+    if (t) t.textContent = 'Δεν φόρτωσε ο κώδικας';
+    if (list) list.innerHTML =
+      '<div class="empty" style="white-space:pre-wrap">' + String(msg) + '</div>';
+  };
+  window.addEventListener('error', (e) => {
+    if (e.filename) boom(e.message + '\n' + e.filename + ':' + e.lineno);
+  });
+  import('./app.js').catch((a) =>
+    import('./assets/js/app.js').catch((b) => boom(a.message + '\n' + b.message))
+  );
 </script>
 </body>
 </html>

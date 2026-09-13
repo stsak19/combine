@@ -1,6 +1,17 @@
-import { PROGRAM, DAY_ORDER, WEEKLY_VOLUME, NUTRITION, GUIDE, ALTERNATIVES, GROUPS } from './data.js';
+import {
+  buildProgram, defaultConfig, configFromGoals,
+  PRESETS, TEMPLATES, EMPHASIS_LIST, ALIASES,
+  WEEKLY_VOLUME, NUTRITION, GUIDE, ALTERNATIVES, GROUPS
+} from './data.js';
 import * as store from './storage.js';
 import { lineChart, barRow } from './charts.js';
+import { readClientSession, clientName, fetchGoals, CLIENT_URL } from './link.js';
+
+/* Το πρόγραμμα φτιάχνεται στην εκκίνηση από τις ρυθμίσεις και
+   ξαναφτιάχνεται όποτε αλλάξουν. Μέχρι τότε είναι άδειο. */
+let PROGRAM = {};
+let DAY_ORDER = [];
+let BUILD = null;
 
 /* ---------- Βοηθητικά ---------- */
 
@@ -46,20 +57,38 @@ const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 const OVERRIDABLE = ['name', 'group', 'sets', 'repMin', 'repMax', 'rest', 'step', 'rir', 'bodyweight'];
 
 function blankPlan() {
-  return { overrides: {}, extras: { A: [], B: [], C: [] } };
+  return { config: defaultConfig(), overrides: {}, extras: {} };
 }
 
 function normalizePlan(raw) {
   const plan = blankPlan();
   if (raw && typeof raw === 'object') {
+    if (raw.config && typeof raw.config === 'object') {
+      plan.config = { ...defaultConfig(), ...raw.config };
+      if (!Array.isArray(plan.config.emphasis)) plan.config.emphasis = [];
+    }
     if (raw.overrides && typeof raw.overrides === 'object') plan.overrides = { ...raw.overrides };
-    DAY_ORDER.forEach((d) => {
-      const list = raw.extras && raw.extras[d];
-      if (Array.isArray(list)) plan.extras[d] = list.filter((x) => x && x.id);
-    });
+    if (raw.extras && typeof raw.extras === 'object') {
+      Object.keys(raw.extras).forEach((d) => {
+        const list = raw.extras[d];
+        if (Array.isArray(list)) plan.extras[d] = list.filter((x) => x && x.id);
+      });
+    }
     if (raw.updated_at) plan.updated_at = raw.updated_at;
   }
   return plan;
+}
+
+/* Ξαναχτίζει το πρόγραμμα από τις ρυθμίσεις. Το ιστορικό δεν αγγίζεται:
+   δένεται στα id του καταλόγου, που δεν αλλάζουν ποτέ. */
+function rebuild() {
+  BUILD = buildProgram(state.plan.config);
+  PROGRAM = BUILD.program;
+  DAY_ORDER = BUILD.order;
+  DAY_ORDER.forEach((d) => {
+    if (!Array.isArray(state.plan.extras[d])) state.plan.extras[d] = [];
+  });
+  if (!DAY_ORDER.includes(state.day)) state.day = DAY_ORDER[0];
 }
 
 /* Ενώνει την αρχική άσκηση με ό,τι έχεις αλλάξει. */
@@ -76,7 +105,7 @@ function resolve(ex, day) {
 
 function dayExercises(d, includeHidden = false) {
   const list = [
-    ...PROGRAM[d].exercises.map((ex) => resolve(ex, d)),
+    ...((PROGRAM[d] || {}).exercises || []).map((ex) => resolve(ex, d)),
     ...(state.plan.extras[d] || []).map((ex) => resolve({ ...ex, custom: true }, d))
   ];
   return includeHidden ? list : list.filter((ex) => !ex.hidden);
@@ -85,6 +114,8 @@ function dayExercises(d, includeHidden = false) {
 const everyExercise = () => DAY_ORDER.flatMap((d) => dayExercises(d, true));
 
 const exById = (id) => everyExercise().find((e) => e.id === id);
+
+const dayLabel = (d) => (PROGRAM[d] ? PROGRAM[d].name : 'Ημέρα ' + d);
 
 /* ---------- Κατάσταση ---------- */
 
@@ -97,7 +128,8 @@ const state = {
   sessions: store.read('sessions', []),
   bodyweight: store.read('bodyweight', []),
   measurements: store.read('measurements', []),
-  profile: store.read('profile', null)
+  profile: store.read('profile', null),
+  goals: null
 };
 
 const save = (key) => store.write(key, state[key]);
@@ -120,10 +152,18 @@ function ensureSession(date, day) {
 const sortedSessions = () => [...state.sessions].sort((a, b) => a.date.localeCompare(b.date));
 
 /* Τελευταία φορά που έγινε η άσκηση, εξαιρώντας τη σημερινή εγγραφή. */
+/* Και τα παλιά id της πρώτης έκδοσης, ώστε να μη χαθεί ιστορικό όταν
+   αλλάζει πρόγραμμα. Γράφουμε πάντα στο καινούριο id, διαβάζουμε και
+   από τα παλιά. */
+function historyIds(exId) {
+  return [exId, ...(ALIASES[exId] || [])];
+}
+
 function lastPerformance(exId) {
+  const ids = historyIds(exId);
   const past = sortedSessions().filter((s) => s.date !== today());
   for (let i = past.length - 1; i >= 0; i--) {
-    const sets = past[i].entries[exId];
+    const sets = ids.map((id) => past[i].entries[id]).find((x) => x && x.length);
     if (sets && sets.some((x) => x && x.w != null)) {
       return { date: past[i].date, sets: sets.filter(Boolean) };
     }
@@ -145,9 +185,10 @@ function suggestion(ex) {
 /* Ποια ημέρα προτείνεται σήμερα: η επόμενη στη ρότα μετά την τελευταία ολοκληρωμένη. */
 function suggestedDay() {
   const done = sortedSessions().filter((s) => s.done);
-  if (!done.length) return 'A';
+  if (!done.length) return DAY_ORDER[0];
   const lastDay = done[done.length - 1].day;
-  return DAY_ORDER[(DAY_ORDER.indexOf(lastDay) + 1) % DAY_ORDER.length];
+  const i = DAY_ORDER.indexOf(lastDay);
+  return i < 0 ? DAY_ORDER[0] : DAY_ORDER[(i + 1) % DAY_ORDER.length];
 }
 
 function weekNumber() {
@@ -197,7 +238,7 @@ function renderDaystrip() {
 
 function renderTrain() {
   renderDaystrip();
-  const day = PROGRAM[state.day];
+  const day = PROGRAM[state.day] || { name: '—', focus: '' };
   $('#day-title').textContent = day.name;
   $('#day-focus').textContent = day.focus;
 
@@ -331,7 +372,7 @@ function applyPatch(ex, patch) {
       else delete state.plan.overrides[ex.id];
     }
   } else {
-    const base = PROGRAM[ex.day].exercises.find((e) => e.id === ex.id) || {};
+    const base = ((PROGRAM[ex.day] || {}).exercises || []).find((e) => e.id === ex.id) || {};
     const o = state.plan.overrides[ex.id] && state.plan.overrides[ex.id].hidden
       ? { hidden: true }
       : {};
@@ -370,6 +411,7 @@ function addExercise(day) {
     step: 2.5,
     rir: '1–3'
   };
+  if (!Array.isArray(state.plan.extras[day])) state.plan.extras[day] = [];
   state.plan.extras[day].push(ex);
   savePlan();
   state.swapping = ex.id;
@@ -847,7 +889,7 @@ function renderHistory() {
     const item = document.createElement('div');
     item.className = 'history-item';
     item.innerHTML =
-      `<span>Ημέρα ${PROGRAM[s.day].letter} · ${setCount} σετ${s.done ? '' : ' (ανοιχτή)'}</span>` +
+      `<span>${dayLabel(s.day)} · ${setCount} σετ${s.done ? '' : ' (ανοιχτή)'}</span>` +
       `<span class="when">${shortDate(s.date)} · ${num(volume, 0)} kg</span>`;
     host.appendChild(item);
   });
@@ -982,7 +1024,178 @@ function renderSettings() {
       ? 'Τα δεδομένα γράφονται στη συσκευή και ανεβαίνουν μόνα τους στο cloud.'
       : 'Ο browser μπλοκάρει την τοπική αποθήκευση, οπότε τα δεδομένα κρατιούνται μόνο για αυτή τη συνεδρία. Σε κανονική σελίδα θα αποθηκεύονται μόνιμα.';
   renderSyncStatus();
+  renderConfig();
   renderPlan();
+}
+
+/* ---------- Ο στόχος και το πρόγραμμα ---------- */
+
+/* Ό,τι βλέπει ο χρήστης πριν πατήσει «Φτιάξε το πρόγραμμα». Μένει εδώ
+   μέχρι να το επιβεβαιώσει: αλλιώς κάθε πείραγμα στα μενού θα άλλαζε
+   το πρόγραμμα κάτω από τα πόδια του. */
+let draft = null;
+
+function ensureDraft() {
+  if (!draft) {
+    draft = { ...state.plan.config, emphasis: [...(state.plan.config.emphasis || [])] };
+  }
+  return draft;
+}
+
+const equipmentOptions = [
+  { id: 'gym', label: 'Γυμναστήριο με μηχανήματα' },
+  { id: 'db', label: 'Μόνο αλτήρες και μπάρα' },
+  { id: 'body', label: 'Μόνο το σώμα μου' }
+];
+
+function renderConfig() {
+  const host = $('#config-panel');
+  if (!host) return;
+  ensureDraft();
+
+  const presetSel = $('#cfg-preset');
+  presetSel.innerHTML = Object.keys(PRESETS)
+    .map((id) => `<option value="${id}"${id === draft.preset ? ' selected' : ''}>${esc(PRESETS[id].label)}</option>`)
+    .join('');
+
+  const daysSel = $('#cfg-days');
+  daysSel.innerHTML = Object.keys(TEMPLATES)
+    .map((d) => `<option value="${d}"${Number(d) === Number(draft.days) ? ' selected' : ''}>${d} μέρες · ${esc(TEMPLATES[d].label)}</option>`)
+    .join('');
+
+  const equipSel = $('#cfg-equip');
+  equipSel.innerHTML = equipmentOptions
+    .map((e) => `<option value="${e.id}"${e.id === draft.equipment ? ' selected' : ''}>${esc(e.label)}</option>`)
+    .join('');
+
+  const chips = $('#cfg-emphasis');
+  chips.innerHTML = '';
+  EMPHASIS_LIST.forEach((e) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.dataset.on = String(draft.emphasis.includes(e.id));
+    b.textContent = e.label;
+    b.addEventListener('click', () => {
+      draft.emphasis = draft.emphasis.includes(e.id)
+        ? draft.emphasis.filter((x) => x !== e.id)
+        : [...draft.emphasis, e.id];
+      renderConfig();
+    });
+    chips.appendChild(b);
+  });
+
+  $('#cfg-tagline').textContent = (PRESETS[draft.preset] || {}).tagline || '';
+
+  /* Προεπισκόπηση: τι θα γίνει αν το εφαρμόσει. */
+  const preview = buildProgram(draft);
+  $('#cfg-preview').innerHTML =
+    `<div class="preview-head">${esc(preview.label)}</div>` +
+    preview.order
+      .map((d) => {
+        const day = preview.program[d];
+        return `<div class="preview-day"><strong>${esc(day.name)}</strong><span>${day.exercises
+          .map((e) => esc(e.name))
+          .join(' · ')}</span></div>`;
+      })
+      .join('') +
+    (preview.note ? `<p class="hint">${esc(preview.note)}</p>` : '');
+
+  const same =
+    JSON.stringify({ ...draft, source: null }) ===
+    JSON.stringify({ ...state.plan.config, source: null });
+  const apply = $('#cfg-apply');
+  apply.disabled = same;
+  apply.textContent = same ? 'Αυτό είναι ήδη το πρόγραμμά σου' : 'Φτιάξε το πρόγραμμά μου';
+
+  renderGoalLink();
+}
+
+function renderGoalLink() {
+  const host = $('#goal-link');
+  if (!host) return;
+  const session = readClientSession();
+  const saved = state.goals;
+
+  if (!session) {
+    host.innerHTML =
+      '<div class="empty">Δεν βρέθηκε σύνδεση πελάτη σε αυτή τη συσκευή. Συνδέσου στην εφαρμογή κρατήσεων και οι στόχοι σου θα έρθουν εδώ μόνοι τους.</div>';
+    return;
+  }
+
+  const chips = (saved && saved.goals.length)
+    ? saved.goals.map((g) => `<span class="goal-chip">${esc(GOAL_LABELS[g] || g)}</span>`).join('')
+    : '<span class="goal-chip goal-chip-empty">Δεν έχεις δηλώσει στόχους ακόμα</span>';
+
+  host.innerHTML =
+    `<div class="goal-head">Στόχοι από την εφαρμογή κρατήσεων${clientName(session) ? ' · ' + esc(clientName(session)) : ''}</div>` +
+    `<div class="goal-chips">${chips}</div>` +
+    (saved && saved.other ? `<p class="hint">Δικός σου στόχος: ${esc(saved.other)}</p>` : '') +
+    '<p class="hint">Τους αλλάζεις στην εφαρμογή κρατήσεων, στις Ρυθμίσεις → Οι στόχοι μου.</p>';
+}
+
+/* Φέρνει τους στόχους από τη βάση και τους μεταφράζει σε ρυθμίσεις. */
+async function pullGoals({ silent } = {}) {
+  ensureDraft();
+  const status = $('#goal-status');
+  try {
+    const res = await fetchGoals();
+    if (!res) { renderGoalLink(); return null; }
+    state.goals = res;
+    const suggestion = configFromGoals(res.goals);
+    if (res.goals.length) {
+      draft = {
+        ...draft,
+        preset: suggestion.preset,
+        emphasis: suggestion.emphasis,
+        source: 'goals'
+      };
+      if (!state.plan.config.daysTouched) {
+        draft.days = Math.max(Number(draft.days) || 3, PRESETS[suggestion.preset].days);
+      }
+    }
+    renderConfig();
+    if (status && !silent) {
+      setStatus(
+        status,
+        res.goals.length
+          ? 'Οι στόχοι σου ήρθαν. Δες την πρόταση πιο κάτω και πάτα «Φτιάξε το πρόγραμμά μου».'
+          : 'Δεν υπάρχουν δηλωμένοι στόχοι στην εφαρμογή κρατήσεων.',
+        true
+      );
+    }
+    return res;
+  } catch (e) {
+    if (status && !silent) setStatus(status, 'Δεν ήρθαν οι στόχοι: ' + e.message, false);
+    return null;
+  }
+}
+
+function applyConfig() {
+  ensureDraft();
+  const before = JSON.stringify(state.plan.config);
+  state.plan.config = { ...state.plan.config, ...draft };
+  if (before !== JSON.stringify(state.plan.config)) {
+    savePlan();
+    rebuild();
+    state.day = suggestedDay();
+    renderAll();
+    renderConfig();
+    renderPlan();
+    const p = PRESETS[state.plan.config.preset];
+    if (p) {
+      const sel = $('#n-goal');
+      if (sel) {
+        sel.value = p.nutrition;
+        renderNutrition();
+      }
+    }
+    if ($('#cfg-status')) setStatus(
+      $('#cfg-status'),
+      'Έτοιμο. Το ιστορικό σου έμεινε ολόκληρο — οι ασκήσεις που συνεχίζουν κρατάνε τα κιλά τους.',
+      true
+    );
+  }
 }
 
 /* ---------- Οι αλλαγές σου στο πρόγραμμα ---------- */
@@ -995,7 +1208,7 @@ function renderPlan() {
   const items = [];
   DAY_ORDER.forEach((d) => {
     dayExercises(d, true).forEach((ex) => {
-      const base = PROGRAM[d].exercises.find((e) => e.id === ex.id);
+      const base = (PROGRAM[d].exercises || []).find((e) => e.id === ex.id);
       const letter = PROGRAM[d].letter;
       if (ex.hidden) {
         items.push({ ex, text: `${ex.name} · αφαιρέθηκε από την ημέρα ${letter}`, action: 'restore' });
@@ -1089,8 +1302,9 @@ const planReset = $('#plan-reset');
 if (planReset) {
   planReset.addEventListener('click', () => {
     if (!confirm('Όλες οι ασκήσεις γυρνούν στο αρχικό πρόγραμμα. Οι καταγραφές σου δεν πειράζονται. Συνέχεια;')) return;
-    state.plan = blankPlan();
+    state.plan = { ...blankPlan(), config: state.plan.config };
     savePlan();
+    rebuild();
     renderAll();
     renderPlan();
   });
@@ -1354,7 +1568,7 @@ function reportHTML() {
             .join('');
           return (
             `<div class="day"><div class="day-head">` +
-            `<span class="day-title">Ημέρα ${PROGRAM[s.day] ? PROGRAM[s.day].letter : s.day} · ${longDate(s.date)}${s.done ? '' : ' · ανοιχτή'}</span>` +
+            `<span class="day-title">${dayLabel(s.day)} · ${longDate(s.date)}${s.done ? '' : ' · ανοιχτή'}</span>` +
             `<span class="day-meta">${setCount} σετ · ${num(vol, 0)} kg</span>` +
             `</div>${lines}</div>`
           );
@@ -1565,6 +1779,32 @@ $('#reset-btn').addEventListener('click', async () => {
   setStatus($('#data-status'), 'Όλα διαγράφηκαν.', true);
 });
 
+/* ---------- Ρυθμίσεις: χειριστήρια ---------- */
+
+if ($('#cfg-preset')) {
+  $('#cfg-preset').addEventListener('change', (e) => {
+    draft.preset = e.target.value;
+    draft.source = 'manual';
+    const p = PRESETS[draft.preset];
+    if (p && !draft.daysTouched) draft.days = p.days;
+    renderConfig();
+  });
+  $('#cfg-days').addEventListener('change', (e) => {
+    draft.days = Number(e.target.value);
+    draft.daysTouched = true;
+    draft.source = 'manual';
+    renderConfig();
+  });
+  $('#cfg-equip').addEventListener('change', (e) => {
+    draft.equipment = e.target.value;
+    draft.source = 'manual';
+    renderConfig();
+  });
+  $('#cfg-apply').addEventListener('click', applyConfig);
+  $('#goal-refresh').addEventListener('click', () => pullGoals({}));
+  $('#client-link').href = CLIENT_URL;
+}
+
 /* ---------- Πλοήγηση ---------- */
 
 function showView(name) {
@@ -1589,6 +1829,7 @@ function renderAll() {
   renderNutrition();
 }
 
+rebuild();
 state.day = suggestedDay();
 fillNutritionSelects();
 renderGuide();
@@ -1598,3 +1839,12 @@ renderSettings();
 
 /* Πρώτος γύρος συγχρονισμού μόλις σταθεί η οθόνη. */
 store.syncNow();
+
+/* Οι στόχοι από την εφαρμογή κρατήσεων. Την πρώτη φορά — όσο δηλαδή
+   το πρόγραμμα είναι ακόμα το προεπιλεγμένο — εφαρμόζονται μόνοι
+   τους. Μετά απλώς φαίνονται στις Ρυθμίσεις και αποφασίζει ο χρήστης. */
+pullGoals({ silent: true }).then((res) => {
+  if (!res || !res.goals.length) return;
+  if (state.plan.config.source && state.plan.config.source !== 'default') return;
+  applyConfig();
+});

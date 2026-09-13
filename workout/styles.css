@@ -152,9 +152,12 @@ button {
 
 /* ---------- Λωρίδα ημερών ---------- */
 
+/* Οι μέρες δεν είναι πια πάντα τρεις: το πρόγραμμα μπορεί να έχει από
+   δύο έως έξι. Αυτόματες στήλες, με ελάχιστο πλάτος που χωράει
+   άνετα ο αντίχειρας. */
 .daystrip {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
   gap: 8px;
   margin: 16px 0 6px;
 }
@@ -838,4 +841,111 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+
+/* ---------- Διακόπτης προς τις κρατήσεις ---------- */
+
+.masthead-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Αντίστροφα από την εφαρμογή κρατήσεων: εκεί μαύρο κουμπί σε άσπρη
+   σελίδα, εδώ άσπρο σε μαύρη. Ίδιο μέγεθος, ίδιο σχήμα. */
+.switch-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  background: #fff;
+  color: #000;
+  border: 1px solid #fff;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.switch-btn:active { opacity: 0.7; }
+
+/* ---------- Στόχοι και γεννήτρια προγράμματος ---------- */
+
+.goal-head {
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.goal-chips, .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.goal-chip {
+  display: inline-block;
+  padding: 5px 9px;
+  font-size: 12px;
+  border: 1px solid var(--rule);
+  background: var(--surface-sunk);
+  color: var(--ink);
+}
+
+.goal-chip-empty { color: var(--muted); }
+
+.chip {
+  padding: 7px 11px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chip[data-on="true"] {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+#cfg-preview {
+  margin: 14px 0 12px;
+  border: 1px solid var(--rule);
+}
+
+.preview-head {
+  font-family: var(--display);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.preview-day {
+  display: block;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.preview-day:last-child { border-bottom: 0; }
+
+.preview-day strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+
+.preview-day span {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }
