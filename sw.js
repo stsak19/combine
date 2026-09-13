@@ -8,7 +8,7 @@
    σβήνει η παλιά μνήμη και οι πελάτες παίρνουν τα καινούρια αρχεία.
 */
 
-const VERSION = "combine-v1";
+const VERSION = "combine-v2";
 const SHELL = VERSION + "-shell";
 const RUNTIME = VERSION + "-runtime";
 
@@ -32,6 +32,7 @@ const SHELL_FILES = [
   "./workout/data.js",
   "./workout/storage.js",
   "./workout/charts.js",
+  "./workout/link.js",
   "./workout/styles.css",
 ];
 
