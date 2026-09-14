@@ -8,7 +8,7 @@
    σβήνει η παλιά μνήμη και οι πελάτες παίρνουν τα καινούρια αρχεία.
 */
 
-const VERSION = "combine-v6";
+const VERSION = "combine-v7";
 const SHELL = VERSION + "-shell";
 const RUNTIME = VERSION + "-runtime";
 
@@ -34,6 +34,8 @@ const SHELL_FILES = [
 const CDN_HOSTS = [
   "unpkg.com",
   "cdn.tailwindcss.com",
+  "cdnjs.cloudflare.com",  /* pdfmake: οι εκτυπώσεις της διαχείρισης */
+  "esm.sh",                /* supabase-js: ο συγχρονισμός του καρνέ */
   "fonts.googleapis.com",
   "fonts.gstatic.com",
 ];
