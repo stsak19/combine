@@ -693,28 +693,6 @@ body.mode-workout {
   margin-top: 10px;
 }
 
-/* ---------- Πάνελ αλλαγής / προσθήκης άσκησης ---------- */
-
-.swap {
-  margin-top: 12px;
-  padding: 12px;
-  background: #0c0c0c;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-}
-
-.swap-hint {
-  margin: 0 0 12px;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-.swap .btn[disabled] {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
 /* ---------- Κουμπιά ---------- */
 
 .btn {
@@ -828,92 +806,8 @@ body.mode-workout {
   height: 3px;
   background: var(--accent);
   border-radius: 0 0 var(--radius) var(--radius);
-  transition: width 0.25s linear;
+  transition: width 1s linear;
 }
-
-/* ---------- Τα τελευταία 4 δευτερόλεπτα: καρδιογράφημα ---------- */
-
-.timer-ecg {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: 30px;
-  display: none;
-  pointer-events: none;
-}
-
-.timer[data-phase='pulse'] .timer-ecg { display: block; }
-.timer[data-phase='pulse'] .timer-bar { display: none; }
-
-/* Ο χώρος για τη γραμμή ανοίγει ομαλά, δεν πετάγεται. */
-.timer { transition: padding-bottom 0.28s ease, background-color 0.2s linear; }
-.timer[data-phase='pulse'] { padding-bottom: 34px; }
-
-.ecg-flat {
-  fill: none;
-  stroke: var(--accent-line);
-  stroke-width: 1;
-}
-
-.ecg-trace {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 1;
-  filter: drop-shadow(0 0 5px rgba(232, 255, 71, 0.55));
-}
-
-/* Ο αριθμός χτυπάει μαζί με τη γραμμή, ένα χτύπο το δευτερόλεπτο. */
-.timer[data-phase='pulse'] .timer-count { animation: timer-beat 1s ease-out infinite; }
-
-@keyframes timer-beat {
-  0%   { transform: scale(1); }
-  8%   { transform: scale(1.16); }
-  26%  { transform: scale(1); }
-  100% { transform: scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .timer[data-phase='pulse'] .timer-count { animation: none; }
-  .ecg-trace { filter: none; }
-}
-
-/* Όταν λήξει: συμπαγές κίτρινο, με μαύρα γράμματα. */
-.timer[data-state='done'] {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 6px 22px rgba(232, 255, 71, 0.28);
-}
-
-.timer[data-state='done'] .timer-count,
-.timer[data-state='done'] .timer-label { color: var(--on-accent); }
-
-.timer[data-state='done'] .timer-label { font-weight: 600; }
-
-.timer[data-state='done'] .timer-bar {
-  width: 100% !important;
-  background: var(--on-accent);
-  opacity: 0.25;
-}
-
-.timer[data-state='done'] button {
-  color: var(--on-accent);
-  border-color: rgba(0, 0, 0, 0.35);
-  font-weight: 600;
-}
-
-/* Στο τέλος το καρδιογράφημα μένει ολόκληρο, μαύρο πάνω στο κίτρινο. */
-.timer[data-state='done'] .ecg-trace {
-  stroke: var(--on-accent);
-  filter: none;
-}
-
-.timer[data-state='done'] .ecg-flat { stroke: rgba(0, 0, 0, 0.22); }
-.timer[data-state='done'] .timer-count { animation: none; }
 
 .timer button {
   color: var(--ink);
@@ -1703,6 +1597,44 @@ const slotDate = (date, time) => {
 };
 const fmtClock = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 const addMin = (d, n) => new Date(d.getTime() + n * 60000);
+
+/* ============================================================
+   Στόχοι
+   Τα κλειδιά είναι ακριβώς τα ίδια με τη goal_keys() στη βάση,
+   με το GOAL_LABELS του admin.html και με το καρνέ προπόνησης
+   πιο κάτω. Αν προστεθεί στόχος, θέλει αλλαγή και στα τέσσερα.
+   Πέρα από αυτούς, ο πελάτης γράφει και δικούς του — πάνε στο
+   goals_custom και δεν χρειάζεται να τους ξέρουμε από πριν.
+   ============================================================ */
+const GOAL_LABELS = {
+  weight_loss: "Απώλεια βάρους",
+  muscle_gain: "Αύξηση μυϊκής μάζας",
+  toning: "Γράμμωση / σύσφιξη",
+  maintain: "Διατήρηση φόρμας",
+  strength: "Αύξηση δύναμης",
+  endurance: "Καλύτερη αντοχή",
+  flexibility: "Ευλυγισία και κινητικότητα",
+  core: "Ισορροπία και σταθερότητα κορμού",
+  event_prep: "Προετοιμασία για αγώνα",
+  posture: "Καλύτερη στάση σώματος",
+  pain_relief: "Λιγότεροι πόνοι στη μέση ή τον αυχένα",
+  injury_recovery: "Επιστροφή μετά από τραυματισμό",
+  stress: "Λιγότερο άγχος, καλύτερη διάθεση",
+  sleep: "Καλύτερος ύπνος",
+  energy: "Ενέργεια για την καθημερινότητα",
+  routine: "Σταθερή ρουτίνα άσκησης",
+  classes: "Ομαδικά μαθήματα και παρέα",
+};
+
+const GOAL_GROUPS = [
+  { title: "Το σώμα μου", keys: ["weight_loss", "muscle_gain", "toning", "maintain"] },
+  { title: "Απόδοση", keys: ["strength", "endurance", "flexibility", "core", "event_prep"] },
+  { title: "Πόνοι και στάση", keys: ["posture", "pain_relief", "injury_recovery"] },
+  { title: "Καθημερινότητα", keys: ["stress", "sleep", "energy", "routine", "classes"] },
+];
+
+const MAX_CUSTOM_GOALS = 6;
+const MAX_CUSTOM_GOAL_LEN = 60;
 
 /* ============================================================
    Ακύρωση από τη διαχείριση
@@ -2785,6 +2717,8 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
         </p>
       </div>
 
+      <GoalsPanel session={session} flash={flash} />
+
       <PushPanel session={session} flash={flash} />
 
       <ReviewPanel session={session} flash={flash} />
@@ -2805,6 +2739,198 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
       </div>
 
       <div className="h-10" />
+    </div>
+  );
+}
+
+/* Οι στόχοι του πελάτη.
+   Διαλέγει όσους θέλει από τη λίστα και γράφει και δικούς του, για
+   ό,τι δεν έχουμε προβλέψει. Τα κρατάει η βάση, οπότε τα βλέπει και
+   η διαχείριση και το καρνέ προπόνησης — μία πηγή, τρεις οθόνες. */
+function GoalsPanel({ session, flash }) {
+  const [picked, setPicked] = useState([]);
+  const [custom, setCustom] = useState([]);
+  const [text, setText] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data, error } = await sb.rpc("my_goals", { p_client_id: session.clientId });
+      if (!alive) return;
+      if (!error && data) {
+        const g = Array.isArray(data.goals) ? data.goals : [];
+        const c = Array.isArray(data.custom) ? data.custom : [];
+        setPicked(g);
+        setCustom(c);
+        /* Αν δεν έχει δηλώσει τίποτα, ανοιχτό — για να το δει. Αν έχει,
+           κλειστό: μια γραμμή με τη σύνοψη αρκεί. */
+        setOpen(g.length === 0 && c.length === 0);
+      }
+      setLoaded(true);
+    })();
+    return () => { alive = false; };
+  }, [session.clientId]);
+
+  const toggle = (k) => {
+    setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+    setDirty(true);
+  };
+
+  const addCustom = () => {
+    const v = text.trim().slice(0, MAX_CUSTOM_GOAL_LEN);
+    if (!v) return;
+    const norm = (s) => s.toLocaleLowerCase("el-GR");
+    if (custom.some((x) => norm(x) === norm(v))) { setText(""); return; }
+    if (custom.length >= MAX_CUSTOM_GOALS) {
+      flash(`Μέχρι ${MAX_CUSTOM_GOALS} δικοί σου στόχοι`);
+      return;
+    }
+    setCustom([...custom, v]);
+    setText("");
+    setDirty(true);
+  };
+
+  const dropCustom = (v) => {
+    setCustom(custom.filter((x) => x !== v));
+    setDirty(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const { data, error } = await sb.rpc("save_goals", {
+      p_client_id: session.clientId,
+      p_goals: picked,
+      p_custom: custom,
+    });
+    setSaving(false);
+    if (error || !data || data.ok !== true) {
+      flash((data && data.error) || "Δεν αποθηκεύτηκε");
+      return;
+    }
+    setPicked(Array.isArray(data.goals) ? data.goals : picked);
+    setCustom(Array.isArray(data.custom) ? data.custom : custom);
+    setDirty(false);
+    flash("Οι στόχοι σου αποθηκεύτηκαν");
+  };
+
+  const count = picked.length + custom.length;
+
+  return (
+    <div className="mt-10 border border-black p-4">
+      <div className="f-display text-[14px] font-bold uppercase tracking-wide">Οι στόχοι μου</div>
+      <p className="f-text mt-2 text-[13px] leading-relaxed text-neutral-600">
+        Διάλεξε όσους θέλεις — και γράψε και δικούς σου, αν δεν τους
+        βρίσκεις στη λίστα. Τους βλέπει ο γυμναστής σου, και το καρνέ
+        προπόνησης ρυθμίζει το πρόγραμμά σου από αυτούς.
+      </p>
+
+      {!loaded ? (
+        <div className="f-text py-6 text-[13px] text-neutral-400">Φόρτωση…</div>
+      ) : (
+        <>
+          {!open ? (
+            <>
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {count === 0 ? (
+                  <span className="f-text text-[13px] text-neutral-400">Δεν έχεις δηλώσει στόχους.</span>
+                ) : (
+                  <>
+                    {picked.map((k) => (
+                      <span key={k} className="f-display border border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
+                        {GOAL_LABELS[k] || k}
+                      </span>
+                    ))}
+                    {custom.map((v) => (
+                      <span key={v} className="f-display border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                        {v}
+                      </span>
+                    ))}
+                  </>
+                )}
+              </div>
+              <div className="mt-4">
+                <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
+                  {count === 0 ? "Διάλεξε στόχους" : "Άλλαξε τους στόχους μου"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {GOAL_GROUPS.map((g) => (
+                <div key={g.title} className="mt-5">
+                  <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                    {g.title}
+                  </div>
+                  <div className="mt-2 flex flex-col">
+                    {g.keys.map((k) => {
+                      const on = picked.includes(k);
+                      return (
+                        <button key={k} onClick={() => toggle(k)}
+                          className="flex items-start gap-3 py-2 text-left">
+                          <span className={`mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center border border-black ${
+                            on ? "bg-black" : "bg-white"}`}>
+                            {on && <span className="f-display text-[13px] font-bold leading-none text-white">✓</span>}
+                          </span>
+                          <span className="f-text text-[14px] leading-snug">{GOAL_LABELS[k]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <div className="mt-6 border-t border-neutral-200 pt-5">
+                <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                  Ο δικός σου στόχος
+                </div>
+                <p className="f-text mt-1 text-[12px] leading-relaxed text-neutral-500">
+                  Γράψε ό,τι θέλεις με δικά σου λόγια. Μέχρι {MAX_CUSTOM_GOALS}.
+                </p>
+
+                {custom.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {custom.map((v) => (
+                      <span key={v}
+                        className="f-display flex items-center gap-2 border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                        {v}
+                        <button onClick={() => dropCustom(v)} aria-label="Αφαίρεση"
+                          className="f-display text-[14px] leading-none">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-3 flex gap-2">
+                  <input value={text} maxLength={MAX_CUSTOM_GOAL_LEN}
+                    onChange={(e) => setText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
+                    placeholder="π.χ. να ανεβαίνω σκάλες χωρίς λαχάνιασμα"
+                    disabled={custom.length >= MAX_CUSTOM_GOALS}
+                    className="f-text h-12 min-w-0 flex-1 border border-black bg-white px-3 text-[14px] outline-none disabled:bg-neutral-100" />
+                  <Button size="md" variant="outline" disabled={!text.trim() || custom.length >= MAX_CUSTOM_GOALS}
+                    onClick={addCustom}>
+                    Πρόσθεσε
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <Button size="lg" disabled={saving || !dirty} onClick={save}>
+                  {saving ? "Αποθήκευση…" : dirty ? "Αποθήκευση" : "Αποθηκευμένο"}
+                </Button>
+                <Button variant="ghost" className="mt-2 w-full" disabled={saving}
+                  onClick={() => setOpen(false)}>
+                  Κλείσιμο
+                </Button>
+              </div>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -4531,6 +4657,15 @@ loadAppSettings().then(() => {
     <div class="panel" id="config-panel">
       <h3>Το πρόγραμμά μου</h3>
 
+      <div class="field" id="goal-box" hidden>
+        <div class="goal-head">Οι στόχοι σου</div>
+        <div class="goal-chips" id="goal-chips"></div>
+        <p class="hint" id="goal-hint"></p>
+        <button type="button" class="btn btn-quiet" id="goal-apply" hidden>
+          Ρύθμισέ το από τους στόχους μου
+        </button>
+      </div>
+
       <div class="field">
         <label for="cfg-preset">Πρόγραμμα</label>
         <select id="cfg-preset"></select>
@@ -4569,24 +4704,6 @@ loadAppSettings().then(() => {
     </div>
 
     <div class="panel">
-      <h3>Χρονόμετρο ξεκούρασης</h3>
-      <div class="field">
-        <label for="alert-mode">Ειδοποίηση όταν τελειώνει ο χρόνος</label>
-        <select id="alert-mode">
-          <option value="auto">Αυτόματα — δόνηση, αλλιώς ήχος</option>
-          <option value="vibrate">Μόνο δόνηση</option>
-          <option value="sound">Μόνο ήχος</option>
-          <option value="both">Δόνηση και ήχος</option>
-          <option value="notify">Ειδοποίηση συστήματος — δουλεύει και σε iPhone</option>
-          <option value="off">Τίποτα</option>
-        </select>
-      </div>
-      <button class="btn btn-quiet btn-block" id="alert-test">Δοκίμασε τώρα</button>
-      <p class="hint" id="alert-support"></p>
-      <div id="alert-status"></div>
-    </div>
-
-    <div class="panel">
       <h3>Τα δεδομένα σου</h3>
       <button class="btn btn-primary btn-block" id="export-btn">Εξαγωγή σε PDF</button>
       <p class="hint">Φτιάχνει μια πλήρη αναφορά: δύναμη ανά άσκηση, σωματικό βάρος, μετρήσεις, όγκο και ολόκληρο το ημερολόγιο. Ανοίγει το παράθυρο εκτύπωσης — διάλεξε <strong>Αποθήκευση ως PDF</strong>. Στο iPhone: Κοινή χρήση → Εκτύπωση → Αποθήκευση σε αρχεία.</p>
@@ -4608,10 +4725,6 @@ loadAppSettings().then(() => {
   <span class="timer-label" id="timer-label">Ξεκούραση</span>
   <button id="timer-skip">Παράλειψη</button>
   <div class="timer-bar" id="timer-bar"></div>
-  <svg class="timer-ecg" id="timer-ecg" viewBox="0 0 240 34" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-    <path class="ecg-flat" id="ecg-flat" d="M0 17 H240" vector-effect="non-scaling-stroke"></path>
-    <path class="ecg-trace" id="ecg-trace" d="" pathLength="1" vector-effect="non-scaling-stroke"></path>
-  </svg>
 </div>
 </div>
 
@@ -5249,7 +5362,8 @@ function __bootWorkout() {
       stress: 'Λιγότερο άγχος',
       sleep: 'Καλύτερος ύπνος',
       energy: 'Ενέργεια για την καθημερινότητα',
-      routine: 'Σταθερή ρουτίνα άσκησης'
+      routine: 'Σταθερή ρουτίνα άσκησης',
+      classes: 'Ομαδικά μαθήματα και παρέα'
     };
 
     const GOAL_MAP = {
@@ -5268,7 +5382,8 @@ function __bootWorkout() {
       stress:          { preset: 'maintain',  rank: 1 },
       sleep:           { preset: 'maintain',  rank: 1 },
       energy:          { preset: 'maintain',  rank: 1 },
-      routine:         { preset: 'maintain',  rank: 1 }
+      routine:         { preset: 'maintain',  rank: 1 },
+      classes:         { preset: 'maintain',  rank: 1, cardio: true }
     };
 
     /* Από τη λίστα στόχων του πελάτη βγάζει μία πρόταση ρυθμίσεων.
@@ -6075,15 +6190,21 @@ function __bootWorkout() {
       };
     }
 
-    /* { goals: ['weight_loss', ...], other: 'κείμενο' } — ή null αν δεν
-       έχει συνδεθεί κανείς. */
+    /* { goals: ['weight_loss', ...], custom: ['δικός του στόχος', ...] }
+       — ή null αν δεν έχει συνδεθεί κανείς.
+
+       Το `other` είναι η παλιά μορφή (ένα κείμενο). Μένει για συμβατότητα
+       με παλιότερες εγγραφές· το `custom` είναι η πηγή αλήθειας. */
     async function fetchGoals() {
       const session = readClientSession();
       if (!session) return null;
       const data = await rpc('my_goals', { p_client_id: session.clientId });
+      const custom = Array.isArray(data && data.custom) ? data.custom.filter(Boolean) : [];
+      const other = (data && data.other) || '';
       return {
         goals: Array.isArray(data && data.goals) ? data.goals : [],
-        other: (data && data.other) || '',
+        custom: custom.length || !other ? custom : [other],
+        other,
         session
       };
     }
@@ -6101,10 +6222,11 @@ function __bootWorkout() {
       PRESETS, EMPHASIS_LIST, ALIASES,
       WEEKLY_VOLUME, NUTRITION, ALTERNATIVES, GROUPS,
       SESSION_TYPES, LIFT_ORDER, MOVE_ORDER, MIX_ORDER, MAX_LIFT_DAYS,
-      normalizeMix, mixTotal, liftTotal, mixSummary
+      normalizeMix, mixTotal, liftTotal, mixSummary,
+      GOAL_LABELS, configFromGoals
     } = __data;
     const { lineChart, barRow } = __charts;
-    const { fetchBrand, CLIENT_URL } = __link;
+    const { fetchBrand, fetchGoals, CLIENT_URL } = __link;
 
     /* Το πρόγραμμα φτιάχνεται στην εκκίνηση από τις ρυθμίσεις και
        ξαναφτιάχνεται όποτε αλλάξουν. Μέχρι τότε είναι άδειο. */
@@ -6236,10 +6358,6 @@ function __bootWorkout() {
       day: 'A',
       editing: null,
       swapping: null,
-      /* Η άσκηση που μόλις προστέθηκε και δεν έχει αποθηκευτεί ακόμα.
-         Αν ο χρήστης πατήσει Άκυρο ή φύγει, φεύγει κι αυτή — δεν μένει
-         στην ημέρα ένα κενό «Νέα άσκηση». */
-      newExercise: null,
       plan: normalizePlan(store.read('plan', null)),
       sessions: store.read('sessions', []),
       bodyweight: store.read('bodyweight', []),
@@ -6413,10 +6531,8 @@ function __bootWorkout() {
           `<span class="letter">${esc(weekdayOf(d, true))}${s && s.done ? '<span class="done"></span>' : ''}</span>` +
           `<span class="meta">${esc(day.name)}</span>`;
         btn.addEventListener('click', () => {
-          discardNewExercise();
           state.day = d;
           state.editing = null;
-          state.swapping = null;
           renderTrain();
         });
         strip.appendChild(btn);
@@ -6470,16 +6586,13 @@ function __bootWorkout() {
           `<div><h3 class="ex-name">${esc(ex.name)}</h3>` +
           `<div class="ex-prescription">${ex.sets} × ${ex.repMin}–${ex.repMax}` +
           (ex.rir && ex.rir !== '—' ? ` · RIR ${esc(ex.rir)}` : '') + `</div></div>` +
-          `<div class="ex-tools">` +
-          (state.newExercise === ex.id ? '' : `<span class="ex-group">${esc(ex.group)}</span>`) +
+          `<div class="ex-tools"><span class="ex-group">${esc(ex.group)}</span>` +
           `<button type="button" class="ex-swap" aria-expanded="${state.swapping === ex.id}"` +
           ` aria-label="Άλλαξε την άσκηση ${esc(ex.name)}">` +
           `<span class="ico" aria-hidden="true">⇄</span>Αλλαγή</button></div>`;
         card.appendChild(head);
 
         $('.ex-swap', head).addEventListener('click', () => {
-          if (state.newExercise && state.newExercise !== ex.id) discardNewExercise();
-          if (state.newExercise === ex.id && state.swapping === ex.id) discardNewExercise();
           state.swapping = state.swapping === ex.id ? null : ex.id;
           state.editing = null;
           renderTrain();
@@ -6609,24 +6722,7 @@ function __bootWorkout() {
       savePlan();
     }
 
-    /* Πετάει την άσκηση που προστέθηκε αλλά δεν αποθηκεύτηκε ποτέ. */
-    function discardNewExercise() {
-      const id = state.newExercise;
-      if (!id) return;
-      state.newExercise = null;
-      let touched = false;
-      Object.keys(state.plan.extras).forEach((d) => {
-        const list = state.plan.extras[d];
-        if (!Array.isArray(list)) return;
-        const i = list.findIndex((e) => e && e.id === id);
-        if (i >= 0) { list.splice(i, 1); touched = true; }
-      });
-      if (state.plan.overrides[id]) { delete state.plan.overrides[id]; touched = true; }
-      if (touched) savePlan();
-    }
-
     function addExercise(day) {
-      discardNewExercise();
       const ex = {
         id: uid(),
         name: 'Νέα άσκηση',
@@ -6641,64 +6737,40 @@ function __bootWorkout() {
       if (!Array.isArray(state.plan.extras[day])) state.plan.extras[day] = [];
       state.plan.extras[day].push(ex);
       savePlan();
-      state.newExercise = ex.id;
       state.swapping = ex.id;
       state.editing = null;
       renderTrain();
-      /* Φέρε το πάνελ στο μάτι — αλλιώς σε κινητό μένει κάτω από το κουμπί. */
-      requestAnimationFrame(() => {
-        const box = document.querySelector('#workout-app .swap');
-        if (box && box.scrollIntoView) box.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      });
     }
 
     function buildSwap(ex) {
       const box = document.createElement('div');
       box.className = 'swap';
 
-      const isNew = state.newExercise === ex.id;
-      const startGroup = isNew ? '' : ex.group;
-      const startName = isNew ? '' : ex.name;
-
-      /* Η λίστα με τις έτοιμες επιλογές για μια ομάδα. Πρώτη πάντα μια
-         γραμμή-οδηγός, ώστε να φαίνεται ότι είναι επιλογή και όχι
-         προεπιλεγμένη άσκηση. */
-      function pickOptions(g, current) {
-        if (!g) return '<option value="">— Διάλεξε πρώτα μυϊκή ομάδα —</option>';
-        const list = ALTERNATIVES[g] || [];
-        const all = [...new Set([...(current ? [current] : []), ...list])];
-        return '<option value="">— Διάλεξε άσκηση —</option>' + all
-          .map((n) => `<option${n === current ? ' selected' : ''}>${esc(n)}</option>`)
-          .join('');
-      }
+      const alts = ALTERNATIVES[ex.group] || [];
+      const options = [...new Set([ex.name, ...alts])];
 
       box.innerHTML = `
-        <p class="swap-hint">${isNew
-          ? 'Διάλεξε πρώτα μυϊκή ομάδα — η λίστα από κάτω αλλάζει ανάλογα. Ή γράψε απευθείας ό,τι έχει το γυμναστήριό σου.'
-          : 'Διάλεξε κάτι από τη λίστα ή γράψε ό,τι έχει το γυμναστήριό σου. Το ιστορικό της θέσης μένει, εκτός αν ζητήσεις καθαρό ξεκίνημα.'}</p>
+        <p class="swap-hint">Διάλεξε κάτι από τη λίστα ή γράψε ό,τι έχει το γυμναστήριό σου. Το ιστορικό της θέσης μένει, εκτός αν ζητήσεις καθαρό ξεκίνημα.</p>
         <div class="field">
-          <label for="sw-group">Μυϊκή ομάδα</label>
-          <select id="sw-group">${(isNew ? '<option value="" selected>— Διάλεξε ομάδα —</option>' : '') +
-            GROUPS.map(
-              (g) => `<option${g === startGroup ? ' selected' : ''}>${esc(g)}</option>`
-            ).join('')}</select>
-        </div>
-        <div class="field">
-          <label for="sw-pick">Έτοιμες επιλογές${startGroup ? ' — ' + esc(startGroup) : ''}</label>
-          <select id="sw-pick">${pickOptions(startGroup, startName)}</select>
+          <label for="sw-pick">Έτοιμες επιλογές — ${esc(ex.group)}</label>
+          <select id="sw-pick">${options
+            .map((n) => `<option${n === ex.name ? ' selected' : ''}>${esc(n)}</option>`)
+            .join('')}</select>
         </div>
         <div class="field">
           <label for="sw-name">Όνομα άσκησης</label>
-          <input id="sw-name" type="text" maxlength="60" placeholder="π.χ. Σταυροί τροχαλίας" value="${esc(startName)}">
+          <input id="sw-name" type="text" maxlength="60" value="${esc(ex.name)}">
         </div>
         <div class="field-pair">
           <div class="field">
-            <label for="sw-sets">Σετ</label>
-            <input id="sw-sets" type="number" inputmode="numeric" min="1" max="8" step="1" value="${ex.sets}">
+            <label for="sw-group">Μυϊκή ομάδα</label>
+            <select id="sw-group">${GROUPS.map(
+              (g) => `<option${g === ex.group ? ' selected' : ''}>${esc(g)}</option>`
+            ).join('')}</select>
           </div>
           <div class="field">
-            <label for="sw-rest">Ξεκούραση (δευτ.)</label>
-            <input id="sw-rest" type="number" inputmode="numeric" min="15" max="600" step="15" value="${ex.rest}">
+            <label for="sw-sets">Σετ</label>
+            <input id="sw-sets" type="number" inputmode="numeric" min="1" max="8" step="1" value="${ex.sets}">
           </div>
         </div>
         <div class="field-pair">
@@ -6711,64 +6783,52 @@ function __bootWorkout() {
             <input id="sw-max" type="number" inputmode="numeric" min="1" max="60" step="1" value="${ex.repMax}">
           </div>
         </div>
-        <div class="field">
-          <label for="sw-step">Βήμα βάρους (kg)</label>
-          <input id="sw-step" type="number" inputmode="decimal" min="0.5" max="20" step="0.5" value="${ex.step}">
+        <div class="field-pair">
+          <div class="field">
+            <label for="sw-step">Βήμα βάρους (kg)</label>
+            <input id="sw-step" type="number" inputmode="decimal" min="0.5" max="20" step="0.5" value="${ex.step}">
+          </div>
+          <div class="field">
+            <label for="sw-rest">Ξεκούραση (δευτ.)</label>
+            <input id="sw-rest" type="number" inputmode="numeric" min="15" max="600" step="15" value="${ex.rest}">
+          </div>
         </div>
         <label class="check"><input type="checkbox" id="sw-bw"${ex.bodyweight ? ' checked' : ''}>
           Με το βάρος του σώματος — τα κιλά μετράνε ως επιπλέον επιβάρυνση</label>
-        ${isNew ? '' : `<label class="check"><input type="checkbox" id="sw-fresh">
-          Καθαρό ξεκίνημα — σβήσε τα προηγούμενα σετ αυτής της θέσης</label>`}
+        <label class="check"><input type="checkbox" id="sw-fresh">
+          Καθαρό ξεκίνημα — σβήσε τα προηγούμενα σετ αυτής της θέσης</label>
         <div class="editor-actions">
-          <button class="btn btn-primary" type="button" data-apply>${isNew ? 'Πρόσθεσε στην ημέρα' : 'Αποθήκευση'}</button>
+          <button class="btn btn-primary" type="button" data-apply>Αποθήκευση</button>
           <button class="btn btn-quiet" type="button" data-cancel>Άκυρο</button>
         </div>
-        ${isNew ? '' : `<div class="btn-row">
+        <div class="btn-row">
           ${ex.changed && !ex.custom ? '<button class="btn btn-quiet" type="button" data-restore>Επαναφορά αρχικής</button>' : ''}
           <button class="btn btn-danger" type="button" data-remove>Αφαίρεσε από την ημέρα</button>
-        </div>`}`;
+        </div>`;
 
       const pick = $('#sw-pick', box);
       const name = $('#sw-name', box);
       const group = $('#sw-group', box);
 
-      const apply = $('[data-apply]', box);
-
-      function syncApply() {
-        apply.disabled = !group.value || !name.value.trim();
-      }
-
-      pick.addEventListener('change', () => {
-        if (!pick.value) return;
-        name.value = pick.value;
-        syncApply();
-      });
-
-      name.addEventListener('input', syncApply);
+      pick.addEventListener('change', () => { name.value = pick.value; });
 
       /* Αλλάζοντας ομάδα, αλλάζει και η λίστα με τις έτοιμες επιλογές. */
       group.addEventListener('change', () => {
-        const keep = ALTERNATIVES[group.value] && ALTERNATIVES[group.value].includes(name.value)
-          ? name.value
-          : '';
-        pick.innerHTML = pickOptions(group.value, keep);
-        $('label[for="sw-pick"]', box).textContent =
-          'Έτοιμες επιλογές' + (group.value ? ' — ' + group.value : '');
-        syncApply();
+        const list = ALTERNATIVES[group.value] || [];
+        pick.innerHTML = [...new Set([name.value, ...list])]
+          .map((n) => `<option${n === name.value ? ' selected' : ''}>${esc(n)}</option>`)
+          .join('');
+        $('label[for="sw-pick"]', box).textContent = 'Έτοιμες επιλογές — ' + group.value;
       });
 
-      syncApply();
-
       $('[data-cancel]', box).addEventListener('click', () => {
-        if (isNew) discardNewExercise();
         state.swapping = null;
         renderTrain();
       });
 
-      apply.addEventListener('click', () => {
+      $('[data-apply]', box).addEventListener('click', () => {
         const finalName = name.value.trim();
         if (!finalName) { name.focus(); return; }
-        if (!group.value) { group.focus(); return; }
 
         let lo = clamp(Math.round(Number($('#sw-min', box).value) || ex.repMin), 1, 60);
         let hi = clamp(Math.round(Number($('#sw-max', box).value) || ex.repMax), 1, 60);
@@ -6785,10 +6845,8 @@ function __bootWorkout() {
           bodyweight: $('#sw-bw', box).checked
         };
 
-        const fresh = $('#sw-fresh', box);
-        if (fresh && fresh.checked) wipeExercise(ex.id);
+        if ($('#sw-fresh', box).checked) wipeExercise(ex.id);
         applyPatch(ex, patch);
-        state.newExercise = null;
         state.swapping = null;
         renderAll();
       });
@@ -6803,15 +6861,12 @@ function __bootWorkout() {
         });
       }
 
-      const remove = $('[data-remove]', box);
-      if (remove) {
-        remove.addEventListener('click', () => {
-          if (!confirm('Θα φύγει από την ημέρα. Τα δεδομένα της μένουν αποθηκευμένα και επιστρέφουν αν την ξαναβάλεις από τις Ρυθμίσεις.')) return;
-          hideExercise(ex.id);
-          state.swapping = null;
-          renderAll();
-        });
-      }
+      $('[data-remove]', box).addEventListener('click', () => {
+        if (!confirm('Θα φύγει από την ημέρα. Τα δεδομένα της μένουν αποθηκευμένα και επιστρέφουν αν την ξαναβάλεις από τις Ρυθμίσεις.')) return;
+        hideExercise(ex.id);
+        state.swapping = null;
+        renderAll();
+      });
 
       setTimeout(() => name.focus({ preventScroll: true }), 30);
       return box;
@@ -6915,279 +6970,40 @@ function __bootWorkout() {
 
     /* ---------- Χρονόμετρο ξεκούρασης ---------- */
 
-    /* Το setInterval δεν είναι ρολόι. Όταν κλειδώνει η οθόνη ή φεύγει η
-       εφαρμογή στο παρασκήνιο, τα κινητά φρενάρουν τα ticks — στο iOS
-       σταματάνε τελείως. Έτσι το χρονόμετρο «κολλούσε» και γύριζε πίσω
-       στα ίδια δευτερόλεπτα. Τώρα κρατάμε τη στιγμή λήξης σε πραγματικό
-       χρόνο και το υπόλοιπο βγαίνει κάθε φορά από το ρολόι του κινητού. */
-
     let timerId = null;
-    let timerHideId = null;
-    let timerEnd = 0;
+    let timerLeft = 0;
     let timerTotal = 0;
-    let timerDone = false;
-
-    /* Τρεις σύντομες δονήσεις: buzz – παύση – buzz – παύση – buzz. */
-    const BUZZ_PATTERN = [130, 90, 130, 90, 130];
-
-    /* Τι θέλει ο χρήστης στο τέλος της ξεκούρασης. Μένει στη συσκευή:
-       το ίδιο πρόσωπο μπορεί να θέλει δόνηση στο κινητό και ήχο στο
-       tablet. */
-    const ALERT_MODES = ['auto', 'vibrate', 'sound', 'both', 'notify', 'off'];
-    let alertMode = store.read('alert', 'auto');
-    if (!ALERT_MODES.includes(alertMode)) alertMode = 'auto';
-
-    const canVibrate = () => typeof navigator !== 'undefined' && 'vibrate' in navigator;
-
-    function doVibrate() {
-      if (!canVibrate()) return false;
-      try {
-        /* Μερικοί browsers θέλουν σταμάτημα πριν το νέο μοτίβο. */
-        navigator.vibrate(0);
-        return navigator.vibrate(BUZZ_PATTERN) !== false;
-      } catch (e) {
-        return false;
-      }
-    }
-
-    let audioCtx = null;
-
-    /* Το iOS δεν αφήνει ήχο να παίξει αν το AudioContext δεν έχει
-       «ξεκλειδώσει» μέσα σε πάτημα του χρήστη. Το κάνουμε τη στιγμή που
-       ξεκινάει το χρονόμετρο — δηλαδή όταν πατάει Αποθήκευση στο σετ. */
-    function primeAudio() {
-      try {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        if (!audioCtx) audioCtx = new AC();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-      } catch (e) { /* χωρίς ήχο, δεν πειράζει */ }
-    }
-
-    function beep() {
-      try {
-        primeAudio();
-        if (!audioCtx) return false;
-        [0, 0.22, 0.44].forEach((offset) => {
-          const t = audioCtx.currentTime + offset;
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          osc.type = 'sine';
-          osc.frequency.value = 880;
-          gain.gain.setValueAtTime(0.0001, t);
-          gain.gain.exponentialRampToValueAtTime(0.25, t + 0.01);
-          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-          osc.connect(gain).connect(audioCtx.destination);
-          osc.start(t);
-          osc.stop(t + 0.15);
-        });
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-
-    /* Η μόνη διαδρομή που δονεί iPhone: ειδοποίηση συστήματος από τον
-       service worker. Θέλει άδεια, και η άδεια ζητιέται μόνο όταν το
-       πατήσει ο ίδιος (interactive) — όχι στη μέση της προπόνησης. */
-    async function systemNotify(interactive) {
-      try {
-        if (!('Notification' in window) || !navigator.serviceWorker) return false;
-        if (Notification.permission === 'denied') return false;
-        if (Notification.permission !== 'granted') {
-          if (!interactive) return false;
-          const p = await Notification.requestPermission();
-          if (p !== 'granted') return false;
-        }
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (!reg || !reg.showNotification) return false;
-        await reg.showNotification('Τέλος ξεκούρασης', {
-          body: 'Πάμε στο επόμενο σετ.',
-          tag: 'rest-timer',
-          renotify: true,
-          vibrate: BUZZ_PATTERN,
-          icon: 'icon-192.png',
-          badge: 'icon-192.png'
-        });
-        /* Κλείνει μόνη της, να μη γεμίσει το κέντρο ειδοποιήσεων. */
-        setTimeout(() => {
-          reg.getNotifications({ tag: 'rest-timer' })
-            .then((ns) => ns.forEach((n) => n.close()))
-            .catch(() => {});
-        }, 7000);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-
-    /* Επιστρέφει τι όντως έγινε, ώστε το κουμπί δοκιμής στις Ρυθμίσεις
-       να λέει την αλήθεια αντί για «έγινε». */
-    async function buzz(interactive) {
-      if (alertMode === 'off') return { vibrated: false, sound: false, notified: false };
-      if (alertMode === 'notify') {
-        const notified = await systemNotify(interactive);
-        return { vibrated: false, sound: false, notified };
-      }
-      const wantVibe = alertMode !== 'sound';
-      const vibrated = wantVibe ? doVibrate() : false;
-      const wantSound =
-        alertMode === 'sound' || alertMode === 'both' || (alertMode === 'auto' && !vibrated);
-      const sound = wantSound ? beep() : false;
-      return { vibrated, sound, notified: false };
-    }
-
-    const timerLeftNow = () => Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
-    const timerLeftExact = () => Math.max(0, (timerEnd - Date.now()) / 1000);
-
-    /* ---------- Καρδιογράφημα των τελευταίων δευτερολέπτων ---------- */
-
-    const PULSE_SECONDS = 4;
-    let rafId = null;
-
-    /* Ένας χτύπος ανά δευτερόλεπτο: ήρεμη γραμμή, μικρό κύμα P, το
-       αιχμηρό QRS, και το φαρδύ T. Οι συντεταγμένες είναι σε μονάδες
-       του viewBox (πλάτος 60 ο χτύπος, ύψος 34, βάση στο 17). */
-    function ecgPath(beats) {
-      const W = 60;
-      const beat = [
-        [0, 17], [22, 17],
-        [25, 12], [28, 17],          /* P */
-        [33, 17],
-        [35.5, 21], [38, 3.5], [41, 28], [43.5, 17],  /* QRS */
-        [48, 17],
-        [51, 11], [55, 17],          /* T */
-        [60, 17]
-      ];
-      let d = '';
-      for (let b = 0; b < beats; b++) {
-        beat.forEach(([x, y], i) => {
-          const px = (b * W + x).toFixed(2);
-          d += (b === 0 && i === 0 ? 'M' : 'L') + px + ' ' + y;
-          d += i === beat.length - 1 && b === beats - 1 ? '' : ' ';
-        });
-      }
-      return d;
-    }
-
-    /* Το viewBox είναι 240 φαρδύ, δηλαδή ακριβώς τέσσερις χτύποι. */
-    (function initEcg() {
-      const path = $('#ecg-trace');
-      if (path) path.setAttribute('d', ecgPath(PULSE_SECONDS));
-    })();
-
-    /* Πόσο από τη γραμμή έχει ήδη γραφτεί, 0 → 1. */
-    function paintEcg(left) {
-      const box = $('#timer');
-      const span = Math.min(PULSE_SECONDS, timerTotal || PULSE_SECONDS);
-      const active = left <= span;
-      const phase = active ? 'pulse' : 'flat';
-      if (box.dataset.phase !== phase) box.dataset.phase = phase;
-      if (!active) return;
-      const path = $('#ecg-trace');
-      if (!path) return;
-      const drawn = span > 0 ? Math.min(1, Math.max(0, (span - left) / span)) : 1;
-      path.style.strokeDashoffset = String(1 - drawn);
-    }
 
     function startTimer(seconds, label) {
       stopTimer();
-      primeAudio();
-      const secs = Math.max(1, Math.round(Number(seconds) || 90));
-      timerTotal = secs;
-      timerEnd = Date.now() + secs * 1000;
-      timerDone = false;
-      const box = $('#timer');
-      box.hidden = false;
-      box.dataset.state = 'running';
+      timerTotal = seconds;
+      timerLeft = seconds;
+      $('#timer').hidden = false;
       $('#timer-label').textContent = 'Ξεκούραση · ' + label;
-      $('#timer-skip').textContent = 'Παράλειψη';
       paintTimer();
-      /* Δύο μηχανισμοί επίτηδες: το requestAnimationFrame δίνει ομαλή
-         γραμμή όσο κοιτάς την οθόνη, το setInterval είναι το δίχτυ όταν
-         ο browser παγώνει τα frames. Και τα δύο διαβάζουν το ίδιο ρολόι,
-         οπότε δεν μπορούν να διαφωνήσουν. */
       timerId = setInterval(() => {
-        if (timerDone) return;
+        timerLeft--;
+        if (timerLeft <= 0) {
+          if (navigator.vibrate) navigator.vibrate([180, 90, 180]);
+          stopTimer();
+          return;
+        }
         paintTimer();
-        if (timerLeftExact() <= 0) finishTimer(true);
-      }, 250);
-      startRaf();
-    }
-
-    function startRaf() {
-      if (rafId != null || !window.requestAnimationFrame) return;
-      const loop = () => {
-        if (timerDone || !timerEnd) { rafId = null; return; }
-        paintTimer();
-        if (timerLeftExact() <= 0) { rafId = null; finishTimer(true); return; }
-        rafId = requestAnimationFrame(loop);
-      };
-      rafId = requestAnimationFrame(loop);
-    }
-
-    function stopRaf() {
-      if (rafId != null && window.cancelAnimationFrame) cancelAnimationFrame(rafId);
-      rafId = null;
+      }, 1000);
     }
 
     function paintTimer() {
-      const left = timerLeftNow();
-      const m = Math.floor(left / 60);
-      const s = String(left % 60).padStart(2, '0');
+      const m = Math.floor(timerLeft / 60);
+      const s = String(timerLeft % 60).padStart(2, '0');
       $('#timer-count').textContent = `${m}:${s}`;
-      const pct = timerTotal > 0 ? (left / timerTotal) * 100 : 0;
-      $('#timer-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
-      paintEcg(timerLeftExact());
-    }
-
-    function finishTimer(withBuzz) {
-      if (timerDone) return;
-      timerDone = true;
-      clearInterval(timerId);
-      timerId = null;
-      stopRaf();
-      timerEnd = Date.now();
-      paintTimer();
-      const box = $('#timer');
-      box.dataset.state = 'done';
-      /* Η γραμμή μένει ολόκληρη γραμμένη στο τέλος. */
-      box.dataset.phase = 'pulse';
-      const trace = $('#ecg-trace');
-      if (trace) trace.style.strokeDashoffset = '0';
-      $('#timer-label').textContent = 'Τέλος ξεκούρασης — πάμε στο επόμενο σετ';
-      $('#timer-skip').textContent = 'Εντάξει';
-      if (withBuzz) buzz(false).catch(() => {});
-      /* Φεύγει μόνο του αν δεν το κλείσεις. */
-      timerHideId = setTimeout(stopTimer, 8000);
+      $('#timer-bar').style.width = (timerLeft / timerTotal) * 100 + '%';
     }
 
     function stopTimer() {
       clearInterval(timerId);
-      clearTimeout(timerHideId);
-      stopRaf();
       timerId = null;
-      timerHideId = null;
-      timerDone = false;
-      timerEnd = 0;
-      const box = $('#timer');
-      box.hidden = true;
-      box.dataset.state = 'idle';
-      box.dataset.phase = 'flat';
-      const trace = $('#ecg-trace');
-      if (trace) trace.style.strokeDashoffset = '1';
+      $('#timer').hidden = true;
     }
-
-    /* Γυρνώντας στην εφαρμογή, το χρονόμετρο συγχρονίζεται με το ρολόι.
-       Αν ο χρόνος τελείωσε όσο ήταν κλειδωμένη η οθόνη, δονεί μόνο αν
-       μόλις έληξε — μια δόνηση τρία λεπτά αργότερα δεν βοηθάει κανέναν. */
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return;
-      if (!timerEnd || timerDone) return;
-      const overdue = Date.now() - timerEnd;
-      if (overdue >= 0) finishTimer(overdue < 2000);
-      else { paintTimer(); startRaf(); }
-    });
 
     $('#timer-skip').addEventListener('click', stopTimer);
 
@@ -7520,45 +7336,7 @@ function __bootWorkout() {
       renderSyncStatus();
       renderConfig();
       renderPlan();
-      renderAlertSettings();
     }
-
-    /* ---------- Ειδοποίηση χρονομέτρου ---------- */
-
-    function renderAlertSettings() {
-      const sel = $('#alert-mode');
-      if (sel) sel.value = alertMode;
-      const hint = $('#alert-support');
-      if (!hint) return;
-      hint.textContent = canVibrate()
-        ? 'Η συσκευή σου υποστηρίζει δόνηση. Αν δεν τη νιώθεις, δες τη δόνηση στις ρυθμίσεις του κινητού — και βγάλε το από σιωπηλή/Μην ενοχλείτε. Δοκίμασε με το κουμπί πιο πάνω.'
-        : 'Η συσκευή σου δεν δίνει δόνηση σε σελίδες — στο iPhone το απαγορεύει η Apple, σε όλους τους browsers. Για να δονηθεί το κινητό διάλεξε «Ειδοποίηση συστήματος». Αλλιώς δουλεύει ο ήχος, αρκεί να μην είναι στο αθόρυβο.';
-    }
-
-    on('#alert-mode', 'change', (e) => {
-      alertMode = ALERT_MODES.includes(e.target.value) ? e.target.value : 'auto';
-      store.write('alert', alertMode);
-      const box = $('#alert-status');
-      if (box) box.innerHTML = '';
-    });
-
-    on('#alert-test', 'click', () => {
-      const box = $('#alert-status');
-      if (alertMode === 'off') {
-        if (box) setStatus(box, 'Η ειδοποίηση είναι κλειστή — άλλαξε τη ρύθμιση από πάνω.', false);
-        return;
-      }
-      if (box) setStatus(box, 'Δοκιμάζω…', true);
-      buzz(true).then((r) => {
-        if (!box) return;
-        if (r.notified) setStatus(box, 'Στάλθηκε ειδοποίηση συστήματος. Αν το κινητό δεν δόνησε, δες τις ειδοποιήσεις της εφαρμογής στις ρυθμίσεις του κινητού.', true);
-        else if (alertMode === 'notify') setStatus(box, 'Δεν δόθηκε άδεια για ειδοποιήσεις. Άνοιξέ τες για το PB3 από τις ρυθμίσεις του κινητού, ή διάλεξε ήχο.', false);
-        else if (r.vibrated && r.sound) setStatus(box, 'Στάλθηκε δόνηση και ήχος.', true);
-        else if (r.vibrated) setStatus(box, 'Στάλθηκε δόνηση. Αν δεν την ένιωσες, φταίνε οι ρυθμίσεις του κινητού — όχι η εφαρμογή.', true);
-        else if (r.sound) setStatus(box, 'Έπαιξε ήχος — η συσκευή δεν δέχεται δόνηση από σελίδες. Ανέβασε την ένταση αν δεν τον άκουσες.', true);
-        else setStatus(box, 'Δεν πέρασε ούτε δόνηση ούτε ήχος. Δοκίμασε «Ειδοποίηση συστήματος».', false);
-      });
-    });
 
     /* ---------- Ο στόχος και το πρόγραμμα ---------- */
 
@@ -7677,10 +7455,139 @@ function __bootWorkout() {
       }
     }
 
+    /* ---------- Οι στόχοι από τις Ρυθμίσεις των κρατήσεων ----------
+       Δεν αλλάζουν εδώ: εδώ μόνο φαίνονται και, αν θέλει, ρυθμίζουν το
+       πρόγραμμα με ένα πάτημα. Γράφονται μία φορά, στις Ρυθμίσεις της
+       εφαρμογής κρατήσεων. */
+
+    let GOALS = null;
+
+    /* Πατάει την πρόταση των στόχων πάνω στο draft, χωρίς να πειράξει
+       πόσες μέρες έχει διαλέξει. Το καρντιό μπαίνει μόνο αν υπάρχει
+       μέρα να του δοθεί χωρίς να μείνει μία μόνο προπόνηση με βάρη. */
+    function goalConfig() {
+      if (!GOALS || !GOALS.goals.length) return null;
+      const c = configFromGoals(GOALS.goals);
+      return c.matched.length ? c : null;
+    }
+
+    function applyGoalsToDraft() {
+      const c = goalConfig();
+      if (!c) return false;
+      ensureDraft();
+      draft.preset = c.preset;
+      draft.emphasis = [...c.emphasis];
+      draft.source = 'goals';
+
+      if (c.cardio && mixTotal(draft.mix) - liftTotal(draft.mix) === 0 && liftTotal(draft.mix) > 1) {
+        const from = LIFT_ORDER.filter((t) => draft.mix[t])
+          .sort((a, b) => draft.mix[b] - draft.mix[a])[0];
+        if (from) {
+          const next = { ...draft.mix };
+          if (next[from] <= 1) delete next[from]; else next[from] = next[from] - 1;
+          next.cardio = (next.cardio || 0) + 1;
+          draft.mix = next;
+        }
+      }
+      return true;
+    }
+
+    /* Ίδιες ρυθμίσεις με ό,τι προτείνουν οι στόχοι; Τότε δεν έχει νόημα
+       το κουμπί. */
+    function draftMatchesGoals() {
+      const c = goalConfig();
+      if (!c) return false;
+      ensureDraft();
+      const em = [...(draft.emphasis || [])].sort().join(',');
+      return draft.preset === c.preset && em === [...c.emphasis].sort().join(',');
+    }
+
+    function renderGoals() {
+      const box = $('#goal-box');
+      if (!box) return;
+
+      const picked = (GOALS && GOALS.goals) || [];
+      const custom = (GOALS && GOALS.custom) || [];
+
+      if (!GOALS) { box.hidden = true; return; }
+      box.hidden = false;
+
+      const chips = $('#goal-chips');
+      chips.innerHTML = '';
+      if (!picked.length && !custom.length) {
+        const s = document.createElement('span');
+        s.className = 'goal-chip goal-chip-empty';
+        s.textContent = 'Δεν έχεις δηλώσει στόχους';
+        chips.appendChild(s);
+      } else {
+        picked.forEach((g) => {
+          const s = document.createElement('span');
+          s.className = 'goal-chip';
+          s.textContent = GOAL_LABELS[g] || g;
+          chips.appendChild(s);
+        });
+        custom.forEach((g) => {
+          const s = document.createElement('span');
+          s.className = 'goal-chip';
+          s.textContent = g;
+          chips.appendChild(s);
+        });
+      }
+
+      const c = goalConfig();
+      const hint = $('#goal-hint');
+      if (hint) {
+        hint.textContent = !picked.length && !custom.length
+          ? 'Γράψε τους στόχους σου στις Ρυθμίσεις της εφαρμογής κρατήσεων — πάτα τον κεραυνό.'
+          : c
+            ? 'Από τους στόχους σου βγαίνει το πρόγραμμα «' + ((PRESETS[c.preset] || {}).label || '') + '».'
+            : 'Οι στόχοι σου δεν αλλάζουν τις ασκήσεις — διάλεξε πρόγραμμα από κάτω.';
+      }
+
+      const btn = $('#goal-apply');
+      if (btn) btn.hidden = !c || draftMatchesGoals();
+    }
+
+    async function loadGoals() {
+      let data = null;
+      try { data = await fetchGoals(); } catch (e) { data = null; }
+      if (!data) return;
+      GOALS = {
+        goals: Array.isArray(data.goals) ? data.goals : [],
+        custom: Array.isArray(data.custom) ? data.custom : []
+      };
+
+      /* Πρώτη φορά, χωρίς να έχει πειράξει τίποτα: στρώνουμε το
+         πρόγραμμα από τους στόχους του αντί να του δώσουμε το
+         προεπιλεγμένο. */
+      if (state.plan.config.source === 'default' && goalConfig()) {
+        draft = null;
+        if (applyGoalsToDraft() && Number(draft.days) === mixTotal(draft.mix)) {
+          state.plan.config = {
+            ...state.plan.config,
+            preset: draft.preset,
+            mix: { ...draft.mix },
+            days: mixTotal(draft.mix),
+            emphasis: [...draft.emphasis],
+            source: 'goals'
+          };
+          delete state.plan.config.cardio;
+          savePlan();
+          rebuild();
+          state.day = suggestedDay();
+          renderAll();
+          renderPlan();
+        }
+      }
+      renderGoals();
+      renderConfig();
+    }
+
     function renderConfig() {
       const host = $('#config-panel');
       if (!host) return;
       ensureDraft();
+      renderGoals();
 
       const presetSel = $('#cfg-preset');
       presetSel.innerHTML = Object.keys(PRESETS)
@@ -8388,6 +8295,13 @@ function __bootWorkout() {
       renderConfig();
     });
 
+    on('#goal-apply', 'click', () => {
+      if (applyGoalsToDraft()) {
+        trimMix(Number(draft.days));
+        renderConfig();
+      }
+    });
+
     on('#cfg-apply', 'click', applyConfig);
 
     const clientLink = $('#client-link');
@@ -8396,7 +8310,6 @@ function __bootWorkout() {
     /* ---------- Πλοήγηση ---------- */
 
     function showView(name) {
-      if (name !== 'train') discardNewExercise();
       state.view = name;
       ['train', 'progress', 'nutrition', 'settings'].forEach((v) => {
         $('#view-' + v).hidden = v !== name;
@@ -8429,6 +8342,10 @@ function __bootWorkout() {
        εφεδρικό, ώστε να μη μείνει κενή η κεφαλίδα όσο φορτώνει. */
     paintBrand();
     loadBrand();
+
+    /* Οι στόχοι του πελάτη, από τη βάση. Αργούν λίγο — η οθόνη είναι
+       ήδη στημένη και απλώς ενημερώνεται όταν έρθουν. */
+    loadGoals();
 
     /* Πρώτος γύρος συγχρονισμού μόλις σταθεί η οθόνη. */
     store.syncNow();
