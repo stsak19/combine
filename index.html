@@ -155,6 +155,7 @@ html, body { margin: 0; background: #fff; }
 
   --green: #4ade80;
   --red: #f87171;
+  --violet: #a78bfa;
 
   --sp: 4px;
   --radius: 10px;
@@ -444,6 +445,36 @@ body.mode-workout {
   background: var(--accent-soft);
 }
 
+/* Άσκηση-κλειδί: μωβ περίγραμμα γύρω από την κάρτα. Η αριστερή μπάρα
+   μένει ελεύθερη, γιατί δείχνει την κατάσταση της άσκησης. */
+.exercise.ex-key {
+  border-top-color: var(--violet);
+  border-right-color: var(--violet);
+  border-bottom-color: var(--violet);
+}
+
+/* Κουμπί «Πρόσθεσε άσκηση»: κουτί με διακεκομμένο περίγραμμα, ώστε να
+   φαίνεται ενέργεια και όχι απλό κείμενο. */
+.add-exercise {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 12px 14px;
+  background: transparent;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 10px;
+  transition: border-color 0.14s, color 0.14s;
+}
+
+.add-exercise:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
 .ex-top {
   display: flex;
   justify-content: space-between;
@@ -476,13 +507,8 @@ body.mode-workout {
   flex-shrink: 0;
 }
 
-/* Η άσκηση-κλειδί ξεχωρίζει τώρα με γεμάτο φόντο, αφού το κίτρινο
-   περίγραμμα το έχουν όλες. */
-.ex-key .ex-group {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
-}
+/* Η άσκηση-κλειδί έχει ίδιο ταμπελάκι με τις υπόλοιπες — ξεχωρίζει από
+   το μωβ περίγραμμα της κάρτας (δες .exercise.ex-key πιο πάνω). */
 
 /* Σετ */
 
@@ -6244,7 +6270,7 @@ function __bootWorkout() {
       const add = document.createElement('button');
       add.type = 'button';
       add.className = 'add-exercise';
-      add.textContent = '+ Πρόσθεσε άσκηση σε αυτή την ημέρα';
+      add.textContent = '+ Πρόσθεσε άσκηση';
       add.addEventListener('click', () => addExercise(state.day));
       list.appendChild(add);
 
