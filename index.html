@@ -828,8 +828,17 @@ body.mode-workout {
   height: 3px;
   background: var(--accent);
   border-radius: 0 0 var(--radius) var(--radius);
-  transition: width 1s linear;
+  transition: width 0.25s linear;
 }
+
+/* Όταν λήξει: το πλαίσιο ανάβει, ώστε να φαίνεται και με το μάτι. */
+.timer[data-state='done'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.timer[data-state='done'] .timer-label { color: var(--ink); }
+.timer[data-state='done'] .timer-bar { width: 100% !important; }
 
 .timer button {
   color: var(--ink);
@@ -6809,40 +6818,135 @@ function __bootWorkout() {
 
     /* ---------- Χρονόμετρο ξεκούρασης ---------- */
 
+    /* Το setInterval δεν είναι ρολόι. Όταν κλειδώνει η οθόνη ή φεύγει η
+       εφαρμογή στο παρασκήνιο, τα κινητά φρενάρουν τα ticks — στο iOS
+       σταματάνε τελείως. Έτσι το χρονόμετρο «κολλούσε» και γύριζε πίσω
+       στα ίδια δευτερόλεπτα. Τώρα κρατάμε τη στιγμή λήξης σε πραγματικό
+       χρόνο και το υπόλοιπο βγαίνει κάθε φορά από το ρολόι του κινητού. */
+
     let timerId = null;
-    let timerLeft = 0;
+    let timerHideId = null;
+    let timerEnd = 0;
     let timerTotal = 0;
+    let timerDone = false;
+
+    /* Τρεις σύντομες δονήσεις: buzz – παύση – buzz – παύση – buzz. */
+    const BUZZ_PATTERN = [130, 90, 130, 90, 130];
+
+    function buzz() {
+      let vibrated = false;
+      try {
+        if (navigator.vibrate) vibrated = navigator.vibrate(BUZZ_PATTERN) !== false;
+      } catch (e) { vibrated = false; }
+      /* Το iOS δεν έχει καθόλου δόνηση στον browser. Εκεί χτυπάει ήχος. */
+      if (!vibrated) beep();
+    }
+
+    let audioCtx = null;
+
+    /* Το iOS δεν αφήνει ήχο να παίξει αν το AudioContext δεν έχει
+       «ξεκλειδώσει» μέσα σε πάτημα του χρήστη. Το κάνουμε τη στιγμή που
+       ξεκινάει το χρονόμετρο — δηλαδή όταν πατάει Αποθήκευση στο σετ. */
+    function primeAudio() {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        if (!audioCtx) audioCtx = new AC();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      } catch (e) { /* χωρίς ήχο, δεν πειράζει */ }
+    }
+
+    function beep() {
+      try {
+        primeAudio();
+        if (!audioCtx) return;
+        [0, 0.22, 0.44].forEach((offset) => {
+          const t = audioCtx.currentTime + offset;
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = 880;
+          gain.gain.setValueAtTime(0.0001, t);
+          gain.gain.exponentialRampToValueAtTime(0.25, t + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+          osc.connect(gain).connect(audioCtx.destination);
+          osc.start(t);
+          osc.stop(t + 0.15);
+        });
+      } catch (e) { /* χωρίς ήχο, δεν πειράζει */ }
+    }
+
+    const timerLeftNow = () => Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
 
     function startTimer(seconds, label) {
       stopTimer();
-      timerTotal = seconds;
-      timerLeft = seconds;
-      $('#timer').hidden = false;
+      primeAudio();
+      const secs = Math.max(1, Math.round(Number(seconds) || 90));
+      timerTotal = secs;
+      timerEnd = Date.now() + secs * 1000;
+      timerDone = false;
+      const box = $('#timer');
+      box.hidden = false;
+      box.dataset.state = 'running';
       $('#timer-label').textContent = 'Ξεκούραση · ' + label;
+      $('#timer-skip').textContent = 'Παράλειψη';
       paintTimer();
+      /* Κάθε 250ms: το δευτερόλεπτο αλλάζει στην ώρα του, χωρίς να
+         «χάνεται» μισό δευτερόλεπτο σε κάθε γύρο. */
       timerId = setInterval(() => {
-        timerLeft--;
-        if (timerLeft <= 0) {
-          if (navigator.vibrate) navigator.vibrate([180, 90, 180]);
-          stopTimer();
-          return;
-        }
+        if (timerDone) return;
         paintTimer();
-      }, 1000);
+        if (timerLeftNow() <= 0) finishTimer(true);
+      }, 250);
     }
 
     function paintTimer() {
-      const m = Math.floor(timerLeft / 60);
-      const s = String(timerLeft % 60).padStart(2, '0');
+      const left = timerLeftNow();
+      const m = Math.floor(left / 60);
+      const s = String(left % 60).padStart(2, '0');
       $('#timer-count').textContent = `${m}:${s}`;
-      $('#timer-bar').style.width = (timerLeft / timerTotal) * 100 + '%';
+      const pct = timerTotal > 0 ? (left / timerTotal) * 100 : 0;
+      $('#timer-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+    }
+
+    function finishTimer(withBuzz) {
+      if (timerDone) return;
+      timerDone = true;
+      clearInterval(timerId);
+      timerId = null;
+      timerEnd = Date.now();
+      paintTimer();
+      const box = $('#timer');
+      box.dataset.state = 'done';
+      $('#timer-label').textContent = 'Τέλος ξεκούρασης — πάμε στο επόμενο σετ';
+      $('#timer-skip').textContent = 'Εντάξει';
+      if (withBuzz) buzz();
+      /* Φεύγει μόνο του αν δεν το κλείσεις. */
+      timerHideId = setTimeout(stopTimer, 8000);
     }
 
     function stopTimer() {
       clearInterval(timerId);
+      clearTimeout(timerHideId);
       timerId = null;
-      $('#timer').hidden = true;
+      timerHideId = null;
+      timerDone = false;
+      timerEnd = 0;
+      const box = $('#timer');
+      box.hidden = true;
+      box.dataset.state = 'idle';
     }
+
+    /* Γυρνώντας στην εφαρμογή, το χρονόμετρο συγχρονίζεται με το ρολόι.
+       Αν ο χρόνος τελείωσε όσο ήταν κλειδωμένη η οθόνη, δονεί μόνο αν
+       μόλις έληξε — μια δόνηση τρία λεπτά αργότερα δεν βοηθάει κανέναν. */
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!timerEnd || timerDone) return;
+      const overdue = Date.now() - timerEnd;
+      if (overdue >= 0) finishTimer(overdue < 2000);
+      else paintTimer();
+    });
 
     $('#timer-skip').addEventListener('click', stopTimer);
 
