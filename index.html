@@ -347,8 +347,8 @@ body.mode-workout {
 .daybtn .letter {
   font-family: var(--display);
   font-weight: 700;
-  font-size: 26px;
-  line-height: 1;
+  font-size: 19px;
+  line-height: 1.1;
   display: block;
 }
 
@@ -468,17 +468,20 @@ body.mode-workout {
 
 .ex-group {
   font-size: 11.5px;
-  color: var(--muted);
-  border: 1px solid var(--rule);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
   border-radius: 999px;
   padding: 2px 9px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
+/* Η άσκηση-κλειδί ξεχωρίζει τώρα με γεμάτο φόντο, αφού το κίτρινο
+   περίγραμμα το έχουν όλες. */
 .ex-key .ex-group {
-  border-color: var(--accent-line);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
 }
 
 /* Σετ */
@@ -657,6 +660,26 @@ body.mode-workout {
 }
 
 .btn-block { width: 100%; }
+
+/* «Τέλος» — το κουμπί που κλείνει τη μέρα. Γεμάτο κίτρινο όσο η μέρα
+   είναι ανοιχτή, ήσυχο μόλις κλείσει. */
+#finish-session {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+  font-family: var(--display);
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+
+#finish-session:hover { background: #d5eb33; }
+
+#finish-session:disabled {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent-line);
+  cursor: default;
+}
 
 .btn-row {
   display: flex;
@@ -4159,7 +4182,7 @@ loadAppSettings().then(() => {
     </div>
     <div id="exercise-list"></div>
     <div class="btn-row">
-      <button class="btn btn-quiet btn-block" id="finish-session">Κλείσε τη σημερινή προπόνηση</button>
+      <button class="btn btn-quiet btn-block" id="finish-session">Τέλος — ολοκλήρωσα την προπόνηση</button>
     </div>
     <p class="hint">Πάτα ένα σετ για να καταγράψεις κιλά και επαναλήψεις. Όταν κλειδώσεις όλα τα σετ στο πάνω όριο του εύρους, η άσκηση σου προτείνει το επόμενο βάρος.</p>
   </main>
@@ -5800,6 +5823,19 @@ function __bootWorkout() {
        ξαναφτιάχνεται όποτε αλλάξουν. Μέχρι τότε είναι άδειο. */
     let PROGRAM = {};
     let DAY_ORDER = [];
+
+    /* ---------- Ονόματα ημερών ----------
+       Το πρόγραμμα είναι ρότα, όχι ημερολόγιο: η πρώτη μέρα μπαίνει
+       Δευτέρα, η δεύτερη Τρίτη κ.ο.κ. Οι μέρες που περισσεύουν στο τέλος
+       της εβδομάδας είναι ξεκούραση. */
+    const WEEKDAY_LONG = ['Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο', 'Κυριακή'];
+    const WEEKDAY_SHORT = ['Δευ', 'Τρί', 'Τετ', 'Πέμ', 'Παρ', 'Σάβ', 'Κυρ'];
+
+    function weekdayOf(dayKey, short) {
+      const i = DAY_ORDER.indexOf(dayKey);
+      const list = short ? WEEKDAY_SHORT : WEEKDAY_LONG;
+      return i < 0 ? '' : (list[i] || list[i % 7]);
+    }
     let BUILD = null;
 
     /* ---------- Βοηθητικά ---------- */
@@ -6081,11 +6117,10 @@ function __bootWorkout() {
         const btn = document.createElement('button');
         btn.className = 'daybtn';
         btn.setAttribute('aria-pressed', String(state.day === d));
-        const meta = day.kind === 'move' ? day.name : day.focus.split(' · ')[0];
         btn.dataset.kind = day.kind || 'lift';
         btn.innerHTML =
-          `<span class="letter">${day.letter}${s && s.done ? '<span class="done"></span>' : ''}</span>` +
-          `<span class="meta">${esc(meta)}</span>`;
+          `<span class="letter">${esc(weekdayOf(d, true))}${s && s.done ? '<span class="done"></span>' : ''}</span>` +
+          `<span class="meta">${esc(day.name)}</span>`;
         btn.addEventListener('click', () => {
           state.day = d;
           state.editing = null;
@@ -6098,7 +6133,8 @@ function __bootWorkout() {
     function renderTrain() {
       renderDaystrip();
       const day = PROGRAM[state.day] || { name: '—', focus: '' };
-      $('#day-title').textContent = day.name;
+      const wd = weekdayOf(state.day);
+      $('#day-title').textContent = wd ? `${wd} · ${day.name}` : day.name;
       $('#day-focus').textContent = day.focus;
 
       const list = $('#exercise-list');
@@ -6117,7 +6153,7 @@ function __bootWorkout() {
 
         const finishMove = $('#finish-session');
         finishMove.textContent =
-          session && session.done ? 'Η μέρα είναι κλεισμένη' : 'Κλείσε τη σημερινή μέρα';
+          session && session.done ? '✓ Ολοκληρώθηκε' : 'Τέλος — ολοκλήρωσα τη μέρα';
         finishMove.disabled = !!(session && session.done);
         return;
       }
@@ -6214,7 +6250,7 @@ function __bootWorkout() {
 
       const finish = $('#finish-session');
       finish.textContent =
-        session && session.done ? 'Η προπόνηση είναι κλεισμένη' : 'Κλείσε τη σημερινή προπόνηση';
+        session && session.done ? '✓ Ολοκληρώθηκε' : 'Τέλος — ολοκλήρωσα την προπόνηση';
       finish.disabled = !!(session && session.done);
     }
 
@@ -6509,7 +6545,7 @@ function __bootWorkout() {
       const isMove = day.kind === 'move';
       let session = sessionFor(today(), state.day);
       if (!isMove && (!session || !Object.keys(session.entries).length)) {
-        alert('Καταχώρησε τουλάχιστον ένα σετ πριν κλείσεις την προπόνηση.');
+        alert('Καταχώρησε τουλάχιστον ένα σετ πριν ολοκληρώσεις την προπόνηση.');
         return;
       }
       if (!session) session = ensureSession(today(), state.day);
@@ -7120,14 +7156,14 @@ function __bootWorkout() {
       DAY_ORDER.forEach((d) => {
         dayExercises(d, true).forEach((ex) => {
           const base = (PROGRAM[d].exercises || []).find((e) => e.id === ex.id);
-          const letter = PROGRAM[d].letter;
+          const letter = weekdayOf(d) || PROGRAM[d].letter;
           if (ex.hidden) {
-            items.push({ ex, text: `${ex.name} · αφαιρέθηκε από την ημέρα ${letter}`, action: 'restore' });
+            items.push({ ex, text: `${ex.name} · αφαιρέθηκε από ${letter}`, action: 'restore' });
           } else if (ex.custom) {
-            items.push({ ex, text: `${ex.name} · δική σου προσθήκη στην ημέρα ${letter}`, action: 'delete' });
+            items.push({ ex, text: `${ex.name} · δική σου προσθήκη, ${letter}`, action: 'delete' });
           } else if (ex.changed) {
             const label = base && base.name !== ex.name ? `${base.name} → ${ex.name}` : ex.name;
-            items.push({ ex, text: `${label} · ημέρα ${letter}`, action: 'reset' });
+            items.push({ ex, text: `${label} · ${letter}`, action: 'reset' });
           }
         });
       });
