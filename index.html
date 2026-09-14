@@ -831,14 +831,29 @@ body.mode-workout {
   transition: width 0.25s linear;
 }
 
-/* Όταν λήξει: το πλαίσιο ανάβει, ώστε να φαίνεται και με το μάτι. */
+/* Όταν λήξει: συμπαγές κίτρινο, με μαύρα γράμματα. */
 .timer[data-state='done'] {
+  background: var(--accent);
   border-color: var(--accent);
-  background: var(--accent-soft);
+  box-shadow: 0 6px 22px rgba(232, 255, 71, 0.28);
 }
 
-.timer[data-state='done'] .timer-label { color: var(--ink); }
-.timer[data-state='done'] .timer-bar { width: 100% !important; }
+.timer[data-state='done'] .timer-count,
+.timer[data-state='done'] .timer-label { color: var(--on-accent); }
+
+.timer[data-state='done'] .timer-label { font-weight: 600; }
+
+.timer[data-state='done'] .timer-bar {
+  width: 100% !important;
+  background: var(--on-accent);
+  opacity: 0.25;
+}
+
+.timer[data-state='done'] button {
+  color: var(--on-accent);
+  border-color: rgba(0, 0, 0, 0.35);
+  font-weight: 600;
+}
 
 .timer button {
   color: var(--ink);
@@ -4494,6 +4509,24 @@ loadAppSettings().then(() => {
     </div>
 
     <div class="panel">
+      <h3>Χρονόμετρο ξεκούρασης</h3>
+      <div class="field">
+        <label for="alert-mode">Ειδοποίηση όταν τελειώνει ο χρόνος</label>
+        <select id="alert-mode">
+          <option value="auto">Αυτόματα — δόνηση, αλλιώς ήχος</option>
+          <option value="vibrate">Μόνο δόνηση</option>
+          <option value="sound">Μόνο ήχος</option>
+          <option value="both">Δόνηση και ήχος</option>
+          <option value="notify">Ειδοποίηση συστήματος — δουλεύει και σε iPhone</option>
+          <option value="off">Τίποτα</option>
+        </select>
+      </div>
+      <button class="btn btn-quiet btn-block" id="alert-test">Δοκίμασε τώρα</button>
+      <p class="hint" id="alert-support"></p>
+      <div id="alert-status"></div>
+    </div>
+
+    <div class="panel">
       <h3>Τα δεδομένα σου</h3>
       <button class="btn btn-primary btn-block" id="export-btn">Εξαγωγή σε PDF</button>
       <p class="hint">Φτιάχνει μια πλήρη αναφορά: δύναμη ανά άσκηση, σωματικό βάρος, μετρήσεις, όγκο και ολόκληρο το ημερολόγιο. Ανοίγει το παράθυρο εκτύπωσης — διάλεξε <strong>Αποθήκευση ως PDF</strong>. Στο iPhone: Κοινή χρήση → Εκτύπωση → Αποθήκευση σε αρχεία.</p>
@@ -6833,13 +6866,24 @@ function __bootWorkout() {
     /* Τρεις σύντομες δονήσεις: buzz – παύση – buzz – παύση – buzz. */
     const BUZZ_PATTERN = [130, 90, 130, 90, 130];
 
-    function buzz() {
-      let vibrated = false;
+    /* Τι θέλει ο χρήστης στο τέλος της ξεκούρασης. Μένει στη συσκευή:
+       το ίδιο πρόσωπο μπορεί να θέλει δόνηση στο κινητό και ήχο στο
+       tablet. */
+    const ALERT_MODES = ['auto', 'vibrate', 'sound', 'both', 'notify', 'off'];
+    let alertMode = store.read('alert', 'auto');
+    if (!ALERT_MODES.includes(alertMode)) alertMode = 'auto';
+
+    const canVibrate = () => typeof navigator !== 'undefined' && 'vibrate' in navigator;
+
+    function doVibrate() {
+      if (!canVibrate()) return false;
       try {
-        if (navigator.vibrate) vibrated = navigator.vibrate(BUZZ_PATTERN) !== false;
-      } catch (e) { vibrated = false; }
-      /* Το iOS δεν έχει καθόλου δόνηση στον browser. Εκεί χτυπάει ήχος. */
-      if (!vibrated) beep();
+        /* Μερικοί browsers θέλουν σταμάτημα πριν το νέο μοτίβο. */
+        navigator.vibrate(0);
+        return navigator.vibrate(BUZZ_PATTERN) !== false;
+      } catch (e) {
+        return false;
+      }
     }
 
     let audioCtx = null;
@@ -6859,7 +6903,7 @@ function __bootWorkout() {
     function beep() {
       try {
         primeAudio();
-        if (!audioCtx) return;
+        if (!audioCtx) return false;
         [0, 0.22, 0.44].forEach((offset) => {
           const t = audioCtx.currentTime + offset;
           const osc = audioCtx.createOscillator();
@@ -6873,7 +6917,60 @@ function __bootWorkout() {
           osc.start(t);
           osc.stop(t + 0.15);
         });
-      } catch (e) { /* χωρίς ήχο, δεν πειράζει */ }
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    /* Η μόνη διαδρομή που δονεί iPhone: ειδοποίηση συστήματος από τον
+       service worker. Θέλει άδεια, και η άδεια ζητιέται μόνο όταν το
+       πατήσει ο ίδιος (interactive) — όχι στη μέση της προπόνησης. */
+    async function systemNotify(interactive) {
+      try {
+        if (!('Notification' in window) || !navigator.serviceWorker) return false;
+        if (Notification.permission === 'denied') return false;
+        if (Notification.permission !== 'granted') {
+          if (!interactive) return false;
+          const p = await Notification.requestPermission();
+          if (p !== 'granted') return false;
+        }
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg || !reg.showNotification) return false;
+        await reg.showNotification('Τέλος ξεκούρασης', {
+          body: 'Πάμε στο επόμενο σετ.',
+          tag: 'rest-timer',
+          renotify: true,
+          vibrate: BUZZ_PATTERN,
+          icon: 'icon-192.png',
+          badge: 'icon-192.png'
+        });
+        /* Κλείνει μόνη της, να μη γεμίσει το κέντρο ειδοποιήσεων. */
+        setTimeout(() => {
+          reg.getNotifications({ tag: 'rest-timer' })
+            .then((ns) => ns.forEach((n) => n.close()))
+            .catch(() => {});
+        }, 7000);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    /* Επιστρέφει τι όντως έγινε, ώστε το κουμπί δοκιμής στις Ρυθμίσεις
+       να λέει την αλήθεια αντί για «έγινε». */
+    async function buzz(interactive) {
+      if (alertMode === 'off') return { vibrated: false, sound: false, notified: false };
+      if (alertMode === 'notify') {
+        const notified = await systemNotify(interactive);
+        return { vibrated: false, sound: false, notified };
+      }
+      const wantVibe = alertMode !== 'sound';
+      const vibrated = wantVibe ? doVibrate() : false;
+      const wantSound =
+        alertMode === 'sound' || alertMode === 'both' || (alertMode === 'auto' && !vibrated);
+      const sound = wantSound ? beep() : false;
+      return { vibrated, sound, notified: false };
     }
 
     const timerLeftNow = () => Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
@@ -6920,7 +7017,7 @@ function __bootWorkout() {
       box.dataset.state = 'done';
       $('#timer-label').textContent = 'Τέλος ξεκούρασης — πάμε στο επόμενο σετ';
       $('#timer-skip').textContent = 'Εντάξει';
-      if (withBuzz) buzz();
+      if (withBuzz) buzz(false).catch(() => {});
       /* Φεύγει μόνο του αν δεν το κλείσεις. */
       timerHideId = setTimeout(stopTimer, 8000);
     }
@@ -7279,7 +7376,45 @@ function __bootWorkout() {
       renderSyncStatus();
       renderConfig();
       renderPlan();
+      renderAlertSettings();
     }
+
+    /* ---------- Ειδοποίηση χρονομέτρου ---------- */
+
+    function renderAlertSettings() {
+      const sel = $('#alert-mode');
+      if (sel) sel.value = alertMode;
+      const hint = $('#alert-support');
+      if (!hint) return;
+      hint.textContent = canVibrate()
+        ? 'Η συσκευή σου υποστηρίζει δόνηση. Αν δεν τη νιώθεις, δες τη δόνηση στις ρυθμίσεις του κινητού — και βγάλε το από σιωπηλή/Μην ενοχλείτε. Δοκίμασε με το κουμπί πιο πάνω.'
+        : 'Η συσκευή σου δεν δίνει δόνηση σε σελίδες — στο iPhone το απαγορεύει η Apple, σε όλους τους browsers. Για να δονηθεί το κινητό διάλεξε «Ειδοποίηση συστήματος». Αλλιώς δουλεύει ο ήχος, αρκεί να μην είναι στο αθόρυβο.';
+    }
+
+    on('#alert-mode', 'change', (e) => {
+      alertMode = ALERT_MODES.includes(e.target.value) ? e.target.value : 'auto';
+      store.write('alert', alertMode);
+      const box = $('#alert-status');
+      if (box) box.innerHTML = '';
+    });
+
+    on('#alert-test', 'click', () => {
+      const box = $('#alert-status');
+      if (alertMode === 'off') {
+        if (box) setStatus(box, 'Η ειδοποίηση είναι κλειστή — άλλαξε τη ρύθμιση από πάνω.', false);
+        return;
+      }
+      if (box) setStatus(box, 'Δοκιμάζω…', true);
+      buzz(true).then((r) => {
+        if (!box) return;
+        if (r.notified) setStatus(box, 'Στάλθηκε ειδοποίηση συστήματος. Αν το κινητό δεν δόνησε, δες τις ειδοποιήσεις της εφαρμογής στις ρυθμίσεις του κινητού.', true);
+        else if (alertMode === 'notify') setStatus(box, 'Δεν δόθηκε άδεια για ειδοποιήσεις. Άνοιξέ τες για το PB3 από τις ρυθμίσεις του κινητού, ή διάλεξε ήχο.', false);
+        else if (r.vibrated && r.sound) setStatus(box, 'Στάλθηκε δόνηση και ήχος.', true);
+        else if (r.vibrated) setStatus(box, 'Στάλθηκε δόνηση. Αν δεν την ένιωσες, φταίνε οι ρυθμίσεις του κινητού — όχι η εφαρμογή.', true);
+        else if (r.sound) setStatus(box, 'Έπαιξε ήχος — η συσκευή δεν δέχεται δόνηση από σελίδες. Ανέβασε την ένταση αν δεν τον άκουσες.', true);
+        else setStatus(box, 'Δεν πέρασε ούτε δόνηση ούτε ήχος. Δοκίμασε «Ειδοποίηση συστήματος».', false);
+      });
+    });
 
     /* ---------- Ο στόχος και το πρόγραμμα ---------- */
 
