@@ -1117,6 +1117,77 @@ body.mode-workout {
   background: var(--accent-soft);
 }
 
+.mix-group {
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 14px 0 2px;
+}
+
+.mix-group:first-child { margin-top: 4px; }
+
+.mix-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.mix-row:last-child { border-bottom: 0; }
+
+.mix-text { flex: 1; min-width: 0; }
+
+.mix-text strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.mix-text span {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.mix-row[data-on="true"] .mix-text strong { color: var(--accent); }
+
+.mix-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.mix-step button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--rule);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  border-radius: var(--radius);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mix-step button:disabled {
+  color: var(--dim);
+  cursor: default;
+}
+
+.mix-step .mix-n {
+  min-width: 28px;
+  text-align: center;
+  font-family: var(--display);
+  font-size: 17px;
+}
+
+.mix-row[data-on="true"] .mix-step .mix-n { color: var(--accent); }
+
 #cfg-preview {
   margin: 14px 0 12px;
   border: 1px solid var(--rule);
@@ -4221,20 +4292,15 @@ loadAppSettings().then(() => {
       </div>
       <p class="hint" id="cfg-tagline"></p>
 
-      <div class="field-pair">
-        <div class="field">
-          <label for="cfg-days">Μέρες την εβδομάδα</label>
-          <select id="cfg-days"></select>
-        </div>
-        <div class="field">
-          <label for="cfg-equip">Εξοπλισμός</label>
-          <select id="cfg-equip"></select>
-        </div>
+      <div class="field">
+        <label for="cfg-days">Μέρες την εβδομάδα</label>
+        <select id="cfg-days"></select>
       </div>
 
       <div class="field">
-        <label for="cfg-cardio">Περπάτημα και καρντιό</label>
-        <select id="cfg-cardio"></select>
+        <label>Πώς θα είναι η εβδομάδα σου</label>
+        <div id="cfg-mix"></div>
+        <p class="hint" id="cfg-mix-hint"></p>
       </div>
 
       <div class="field">
@@ -4255,11 +4321,6 @@ loadAppSettings().then(() => {
         <button class="btn btn-quiet" id="plan-reset">Επαναφορά όλων των ασκήσεων</button>
       </div>
       <p class="hint">Γυρνάει τις ασκήσεις όπως τις έφτιαξε το πρόγραμμα. Ο στόχος και οι μέρες μένουν όπως τα έχεις — και οι καταγραφές σου δεν πειράζονται.</p>
-    </div>
-
-    <div class="panel">
-      <h3>Συγχρονισμός</h3>
-      <div id="sync-status"></div>
     </div>
 
     <div class="panel">
@@ -4419,82 +4480,178 @@ function __bootWorkout() {
       birddog:  ['core']
     };
 
-    /* ---------- Πρότυπα ανά αριθμό ημερών ----------
-       Κάθε ημέρα είναι μια λίστα από id του καταλόγου. Η σειρά μετράει:
-       πρώτα οι σύνθετες, μετά οι μονωτικές. */
+    /* ---------- Τύποι προπόνησης ----------
+       Δεν διαλέγεις πια «πρότυπο ημερών». Διαλέγεις πόσες μέρες θα είσαι
+       ενεργός και πώς μοιράζονται: π.χ. 3 φορές full body και 2 περπάτημα.
+       Κάθε τύπος έχει παραλλαγές, ώστε δύο ίδιες μέρες να μη βγαίνουν
+       ολόιδιες. Οι slots είναι id του καταλόγου, με σειρά: πρώτα οι
+       σύνθετες, μετά οι μονωτικές. */
 
-    const TEMPLATES = {
-      2: {
-        label: 'Full body ×2',
-        note: 'Δύο μέρες, όλο το σώμα κάθε φορά. Το ελάχιστο που φέρνει αποτέλεσμα.',
-        days: [
-          { letter: 'Α', name: 'Ημέρα Α', focus: 'Squat · Στήθος · Έλξεις',
-            slots: ['squat', 'bench', 'pulldown', 'lateral', 'curl', 'core'] },
-          { letter: 'Β', name: 'Ημέρα Β', focus: 'Οπίσθια αλυσίδα · Ώμοι · Κωπηλατική',
-            slots: ['rdl', 'row', 'ohp', 'lateral', 'triceps', 'calves'] }
-        ]
-      },
-      3: {
-        label: 'Full body ×3',
-        note: 'Η καλύτερη δομή για τον πρώτο χρόνο: κάθε μυς 3 φορές την εβδομάδα.',
-        days: [
-          { letter: 'Α', name: 'Ημέρα Α', focus: 'Squat · Στήθος · Κωπηλατική',
+    const SESSION_TYPES = {
+      full: {
+        label: 'Full body',
+        kind: 'lift',
+        hint: 'Όλο το σώμα σε μία προπόνηση. Η καλύτερη επιλογή για τον πρώτο χρόνο.',
+        note: 'Full body: κάθε μυς δουλεύει σε κάθε προπόνηση. Άφησε μία μέρα ξεκούρασης ανάμεσα.',
+        variants: [
+          { focus: 'Squat · Στήθος · Κωπηλατική',
             slots: ['squat', 'bench', 'row', 'lateral', 'curl', 'core'] },
-          { letter: 'Β', name: 'Ημέρα Β', focus: 'Οπίσθια αλυσίδα · Έλξεις · Ώμοι',
+          { focus: 'Οπίσθια αλυσίδα · Έλξεις · Ώμοι',
             slots: ['rdl', 'pulldown', 'ohp', 'incline', 'lateral', 'triceps'] },
-          { letter: 'Γ', name: 'Ημέρα Γ', focus: 'Πόδια · Πλάτη · Οπίσθιοι δελτοειδείς',
+          { focus: 'Πόδια · Πλάτη · Οπίσθιοι δελτοειδείς',
             slots: ['legpress', 'dbrow', 'bench', 'facepull', 'lateral', 'calves'] }
         ]
       },
-      4: {
-        label: 'Άνω / Κάτω ×2',
-        note: 'Περισσότερος χρόνος ανά μυϊκή ομάδα, με δύο μέρες άνω και δύο κάτω.',
-        days: [
-          { letter: 'Α', name: 'Άνω Α', focus: 'Στήθος · Πλάτη · Ώμοι',
+      upper: {
+        label: 'Άνω σώμα',
+        kind: 'lift',
+        hint: 'Στήθος, πλάτη, ώμοι και χέρια.',
+        note: 'Άνω / κάτω: περισσότερος χρόνος ανά μυϊκή ομάδα. Ταιριάζει με 4 μέρες βάρη.',
+        variants: [
+          { focus: 'Στήθος · Πλάτη · Ώμοι',
             slots: ['bench', 'row', 'ohp', 'lateral', 'curl', 'triceps'] },
-          { letter: 'Β', name: 'Κάτω Α', focus: 'Squat · Τετρακέφαλοι · Κορμός',
+          { focus: 'Έλξεις · Κλίση · Οπίσθιοι δελτοειδείς',
+            slots: ['pulldown', 'incline', 'dbrow', 'lateral', 'facepull', 'hammer'] }
+        ]
+      },
+      lower: {
+        label: 'Κάτω σώμα',
+        kind: 'lift',
+        hint: 'Πόδια, γλουτοί και κορμός.',
+        variants: [
+          { focus: 'Squat · Τετρακέφαλοι · Κορμός',
             slots: ['squat', 'split', 'legext', 'calves', 'core'] },
-          { letter: 'Γ', name: 'Άνω Β', focus: 'Έλξεις · Κλίση · Οπίσθιοι δελτοειδείς',
-            slots: ['pulldown', 'incline', 'dbrow', 'lateral', 'facepull', 'hammer'] },
-          { letter: 'Δ', name: 'Κάτω Β', focus: 'Οπίσθια αλυσίδα · Γλουτοί',
+          { focus: 'Οπίσθια αλυσίδα · Γλουτοί',
             slots: ['rdl', 'hipthrust', 'legcurl', 'calves', 'pallof'] }
         ]
       },
-      5: {
-        label: 'Άνω / Κάτω / Push / Pull / Πόδια',
-        note: 'Για όποιον προπονείται σταθερά και θέλει όγκο ανά μυϊκή ομάδα.',
-        days: [
-          { letter: 'Α', name: 'Άνω', focus: 'Στήθος · Πλάτη · Ώμοι',
-            slots: ['bench', 'row', 'ohp', 'lateral', 'curl', 'triceps'] },
-          { letter: 'Β', name: 'Κάτω', focus: 'Squat · Γάμπες',
-            slots: ['squat', 'legcurl', 'legext', 'calves', 'core'] },
-          { letter: 'Γ', name: 'Push', focus: 'Στήθος · Ώμοι · Τρικέφαλα',
-            slots: ['incline', 'dbohp', 'fly', 'lateral', 'triceps'] },
-          { letter: 'Δ', name: 'Pull', focus: 'Πλάτη · Οπίσθιοι δελτοειδείς · Δικέφαλα',
-            slots: ['pulldown', 'dbrow', 'facepull', 'pullover', 'hammer'] },
-          { letter: 'Ε', name: 'Πόδια', focus: 'Οπίσθια αλυσίδα · Γλουτοί',
-            slots: ['rdl', 'hipthrust', 'split', 'calves', 'pallof'] }
-        ]
-      },
-      6: {
-        label: 'Push / Pull / Πόδια ×2',
-        note: 'Μεγάλος όγκος, έξι μέρες. Μόνο αν ο ύπνος και η διατροφή είναι σταθερά.',
-        days: [
-          { letter: 'Α', name: 'Push Α', focus: 'Στήθος · Ώμοι · Τρικέφαλα',
+      push: {
+        label: 'Push',
+        kind: 'lift',
+        hint: 'Στήθος, ώμοι, τρικέφαλα — ό,τι σπρώχνει.',
+        note: 'Push / Pull / Πόδια: μεγάλος όγκος. Θέλει σταθερό ύπνο και διατροφή.',
+        variants: [
+          { focus: 'Στήθος · Ώμοι · Τρικέφαλα',
             slots: ['bench', 'dbohp', 'fly', 'lateral', 'triceps'] },
-          { letter: 'Β', name: 'Pull Α', focus: 'Πλάτη · Δικέφαλα',
+          { focus: 'Κλίση · Ώμοι · Τρικέφαλα',
+            slots: ['incline', 'ohp', 'pushup', 'lateral', 'triceps'] }
+        ]
+      },
+      pull: {
+        label: 'Pull',
+        kind: 'lift',
+        hint: 'Πλάτη και δικέφαλα — ό,τι τραβάει.',
+        variants: [
+          { focus: 'Πλάτη · Δικέφαλα',
             slots: ['pulldown', 'row', 'facepull', 'curl'] },
-          { letter: 'Γ', name: 'Πόδια Α', focus: 'Squat · Τετρακέφαλοι',
+          { focus: 'Έλξεις · Οπίσθιοι δελτοειδείς',
+            slots: ['pullup', 'dbrow', 'reverfly', 'hammer'] }
+        ]
+      },
+      legs: {
+        label: 'Πόδια',
+        kind: 'lift',
+        hint: 'Τετρακέφαλοι, δικέφαλοι μηρού, γλουτοί, γάμπες.',
+        variants: [
+          { focus: 'Squat · Τετρακέφαλοι',
             slots: ['squat', 'legext', 'calves', 'core'] },
-          { letter: 'Δ', name: 'Push Β', focus: 'Κλίση · Ώμοι',
-            slots: ['incline', 'ohp', 'pushup', 'lateral', 'triceps'] },
-          { letter: 'Ε', name: 'Pull Β', focus: 'Έλξεις · Οπίσθιοι δελτοειδείς',
-            slots: ['pullup', 'dbrow', 'reverfly', 'hammer'] },
-          { letter: 'ΣΤ', name: 'Πόδια Β', focus: 'Οπίσθια αλυσίδα · Γλουτοί',
+          { focus: 'Οπίσθια αλυσίδα · Γλουτοί',
             slots: ['rdl', 'hipthrust', 'legcurl', 'calves', 'pallof'] }
         ]
+      },
+      walk: {
+        label: 'Περπάτημα',
+        kind: 'move',
+        hint: '30–45 λεπτά ή 8.000–10.000 βήματα. Δεν κουράζει τα πόδια για την επόμενη προπόνηση.'
+      },
+      cardio: {
+        label: 'Καρντιό',
+        kind: 'move',
+        hint: '20–40 λεπτά ποδήλατο ή ελλειπτικό, σε ρυθμό που σου επιτρέπει να μιλάς.'
       }
     };
+
+    const LIFT_ORDER = ['full', 'upper', 'lower', 'push', 'pull', 'legs'];
+    const MOVE_ORDER = ['walk', 'cardio'];
+    const MIX_ORDER = [...LIFT_ORDER, ...MOVE_ORDER];
+    const GREEK_LETTERS = ['Α', 'Β', 'Γ', 'Δ', 'Ε', 'ΣΤ'];
+    const MAX_LIFT_DAYS = 6;
+
+    const mixTotal = (mix) => MIX_ORDER.reduce((s, t) => s + (Number(mix[t]) || 0), 0);
+    const liftTotal = (mix) => LIFT_ORDER.reduce((s, t) => s + (Number(mix[t]) || 0), 0);
+
+    function mixSummary(mix) {
+      return MIX_ORDER
+        .filter((t) => mix[t])
+        .map((t) => `${SESSION_TYPES[t].label} ×${mix[t]}`)
+        .join(' · ');
+    }
+
+    /* Παλιές ρυθμίσεις (πριν υπάρξει το μείγμα) — μεταφράζονται μία φορά
+       σε μείγμα, ώστε κανείς να μη χάσει το πρόγραμμά του. */
+    const LEGACY_MIX = {
+      2: { full: 2 },
+      3: { full: 3 },
+      4: { upper: 2, lower: 2 },
+      5: { upper: 1, lower: 1, push: 1, pull: 1, legs: 1 },
+      6: { push: 2, pull: 2, legs: 2 }
+    };
+
+    function normalizeMix(cfg) {
+      const raw = (cfg && cfg.mix) || null;
+      if (raw && typeof raw === 'object') {
+        const out = {};
+        MIX_ORDER.forEach((t) => {
+          const n = Math.round(Number(raw[t]) || 0);
+          if (n > 0) out[t] = Math.min(6, n);
+        });
+        if (mixTotal(out)) {
+          /* Πάνω από έξι μέρες με βάρη δεν χωράνε στο καρνέ. */
+          while (liftTotal(out) > MAX_LIFT_DAYS) {
+            const t = LIFT_ORDER.filter((x) => out[x]).sort((a, b) => out[b] - out[a])[0];
+            if (!t) break;
+            if (--out[t] <= 0) delete out[t];
+          }
+          return out;
+        }
+      }
+      const days = Math.min(6, Math.max(2, Math.round(Number(cfg && cfg.days) || 3)));
+      const base = { ...(LEGACY_MIX[days] || LEGACY_MIX[3]) };
+      const c = cfg && cfg.cardio;
+      if (c === 'walk') base.walk = 2;
+      else if (c === 'liss') base.cardio = 2;
+      else if (c === 'both') { base.walk = 2; base.cardio = 1; }
+      /* Επτά μέρες είναι το ταβάνι της εβδομάδας. */
+      while (mixTotal(base) > 7) {
+        const t = MOVE_ORDER.filter((x) => base[x]).pop();
+        if (!t) break;
+        if (--base[t] <= 0) delete base[t];
+      }
+      return base;
+    }
+
+    /* Η σειρά της εβδομάδας: εναλλάξ ανάμεσα στους τύπους, ώστε δύο ίδιες
+       μέρες να μην πέφτουν κολλητά (Άνω Α · Κάτω Α · Άνω Β · Κάτω Β). */
+    function weekPlan(mix) {
+      const left = {};
+      LIFT_ORDER.forEach((t) => { if (mix[t]) left[t] = mix[t]; });
+      const types = Object.keys(left);
+      const total = types.reduce((s, t) => s + left[t], 0);
+      const seen = {};
+      const out = [];
+      let guard = 0;
+      while (out.length < total && guard++ < 40) {
+        types.forEach((t) => {
+          if (!left[t] || out.length >= total) return;
+          const i = seen[t] || 0;
+          const variants = SESSION_TYPES[t].variants;
+          out.push({ type: t, index: i, variant: variants[i % variants.length] });
+          seen[t] = i + 1;
+          left[t]--;
+        });
+      }
+      return out.slice(0, MAX_LIFT_DAYS);
+    }
 
     const DAY_KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -4872,45 +5029,27 @@ function __bootWorkout() {
     }
 
     function defaultConfig() {
-      return { preset: 'recomp', days: 3, equipment: 'gym', emphasis: [], cardio: 'none', source: 'default' };
+      return { preset: 'recomp', days: 3, equipment: 'gym', emphasis: [], source: 'default' };
     }
 
     /* ---------- Περπάτημα και καρντιό ----------
        Δεν μπαίνουν στα σετ: δεν έχουν κιλά και επαναλήψεις να
-       καταγράψεις. Μπαίνουν ως οδηγία κάτω από τις ασκήσεις της ημέρας,
-       γιατί εκεί τα βλέπεις τη στιγμή που τα χρειάζεσαι. */
-    const CARDIO_OPTIONS = [
-      { id: 'none', label: 'Τίποτα — μόνο βάρη' },
-      { id: 'walk', label: 'Περπάτημα' },
-      { id: 'liss', label: 'Καρντιό (ποδήλατο, ελλειπτικό)' },
-      { id: 'both', label: 'Περπάτημα και καρντιό' }
-    ];
-
-    const CARDIO = {
-      walk: {
-        title: 'Περπάτημα',
-        lines: [
-          '8.000–10.000 βήματα την ημέρα, όποτε σου βολεύει.',
-          'Είναι ο πιο ανώδυνος τρόπος να κάψεις παραπάνω: δεν κουράζει τα πόδια για την επόμενη προπόνηση.'
-        ]
-      },
-      liss: {
-        title: 'Καρντιό',
-        lines: [
-          '20–40 λεπτά, μία έως τρεις φορές την εβδομάδα, σε ρυθμό που σου επιτρέπει να μιλάς.',
-          'Ποδήλατο ή ελλειπτικό αντί για τρέξιμο — κουράζει λιγότερο τα πόδια.',
-          'Αν το κάνεις την ίδια μέρα με τα βάρη, πρώτα τα βάρη.'
-        ]
-      },
-      both: {
-        title: 'Περπάτημα και καρντιό',
-        lines: [
-          '8.000–10.000 βήματα την ημέρα ως βάση.',
-          'Συν 20–40 λεπτά ποδήλατο ή ελλειπτικό, μία έως τρεις φορές την εβδομάδα.',
-          'Αν το κάνεις την ίδια μέρα με τα βάρη, πρώτα τα βάρη.'
-        ]
-      }
-    };
+       καταγράψεις. Βγαίνουν ως οδηγία κάτω από τις ασκήσεις της ημέρας,
+       με τους αριθμούς που έβαλε ο ίδιος στο μείγμα της εβδομάδας. */
+    function cardioFromMix(mix) {
+      const w = Number(mix.walk) || 0;
+      const c = Number(mix.cardio) || 0;
+      if (!w && !c) return null;
+      const lines = [];
+      if (w) lines.push(`${w} ${w === 1 ? 'μέρα' : 'μέρες'} περπάτημα την εβδομάδα: 30–45 λεπτά ή 8.000–10.000 βήματα.`);
+      if (c) lines.push(`${c} ${c === 1 ? 'φορά' : 'φορές'} καρντιό: 20–40 λεπτά ποδήλατο ή ελλειπτικό, σε ρυθμό που σου επιτρέπει να μιλάς.`);
+      lines.push(
+        w && c
+          ? 'Κράτησέ τα σε μέρες χωρίς βάρη. Αν πέσουν την ίδια μέρα, πρώτα τα βάρη.'
+          : 'Βάλ\' το σε μέρα χωρίς βάρη. Αν πέσει την ίδια μέρα με τα βάρη, πρώτα τα βάρη.'
+      );
+      return { title: w && c ? 'Περπάτημα και καρντιό' : w ? 'Περπάτημα' : 'Καρντιό', lines };
+    }
 
     /* Η άσκηση όπως θα τη δει ο χρήστης: κατάλογος + το preset από πάνω. */
     function shape(id, preset) {
@@ -4934,12 +5073,29 @@ function __bootWorkout() {
     function buildProgram(raw) {
       const cfg = { ...defaultConfig(), ...(raw || {}) };
       const preset = PRESETS[cfg.preset] || PRESETS.recomp;
-      const days = Math.min(6, Math.max(2, Number(cfg.days) || preset.days));
-      const tpl = TEMPLATES[days] || TEMPLATES[3];
+      const mix = normalizeMix({ ...(raw || {}), days: cfg.days });
+      let week = weekPlan(mix);
+
+      /* Δικλείδα: χωρίς καμία μέρα με βάρη δεν υπάρχει πρόγραμμα να δείξεις. */
+      if (!week.length) {
+        mix.full = 1;
+        week = weekPlan(mix);
+      }
+
+      const counts = {};
+      week.forEach((w) => { counts[w.type] = (counts[w.type] || 0) + 1; });
+
+      const plan = week.map((w, i) => ({
+        letter: GREEK_LETTERS[i],
+        name: counts[w.type] > 1
+          ? `${SESSION_TYPES[w.type].label} ${GREEK_LETTERS[w.index]}`
+          : SESSION_TYPES[w.type].label,
+        focus: w.variant.focus,
+        slots: [...w.variant.slots]
+      }));
 
       /* Οι ασκήσεις της έμφασης μπαίνουν στο τέλος της ημέρας που έχει
          ήδη τις λιγότερες — και μόνο αν δεν υπάρχουν ήδη εκεί. */
-      const plan = tpl.days.map((d) => ({ ...d, slots: [...d.slots] }));
       (cfg.emphasis || []).forEach((e) => {
         const extra = (EMPHASIS[e] && EMPHASIS[e].add) || [];
         extra.forEach((id) => {
@@ -4973,8 +5129,7 @@ function __bootWorkout() {
           exercises.push(shape(id, preset));
         });
 
-        /* Καμία μέρα δεν φεύγει με λιγότερες από τέσσερις ασκήσεις. Αν ο
-           εξοπλισμός έκοψε πολλά, γεμίζουμε από ό,τι μένει διαθέσιμο. */
+        /* Καμία μέρα δεν φεύγει με λιγότερες από τέσσερις ασκήσεις. */
         if (exercises.length < 4) {
           const level = EQUIP_RANK[cfg.equipment] == null ? 2 : EQUIP_RANK[cfg.equipment];
           const covered = new Set(exercises.map((e) => e.group));
@@ -4997,19 +5152,34 @@ function __bootWorkout() {
         };
       });
 
+      /* Οι μέρες εκτός γυμναστηρίου δεν γίνονται ημέρες του καρνέ — δεν
+         έχουν σετ να καταγράψεις. Φαίνονται στην προεπισκόπηση και ως
+         οδηγία μέσα στην προπόνηση. */
+      const moves = MOVE_ORDER
+        .filter((t) => mix[t])
+        .map((t) => ({
+          name: `${SESSION_TYPES[t].label} ×${mix[t]}`,
+          text: SESSION_TYPES[t].hint
+        }));
+
+      const mainLift = week.length ? week[0].type : 'full';
+
       return {
         program,
         order,
-        days,
+        mix,
+        moves,
+        days: mixTotal(mix),
+        liftDays: week.length,
         preset: cfg.preset,
-        label: `${preset.label} · ${tpl.label}`,
-        note: preset.note || tpl.note,
-        cardio: CARDIO[cfg.cardio] || null,
+        label: `${preset.label} · ${mixSummary(mix)}`,
+        note: preset.note || (SESSION_TYPES[mainLift] || {}).note || '',
+        cardio: cardioFromMix(mix),
         nutritionGoal: preset.nutrition
       };
     }
 
-    return { CATALOG, ALIASES, TEMPLATES, DAY_KEYS, WEEKLY_VOLUME, GROUPS, ALTERNATIVES, NUTRITION, GUIDE, PRESETS, EMPHASIS_LIST, GOAL_LABELS, GOAL_MAP, configFromGoals, defaultConfig, CARDIO_OPTIONS, CARDIO, buildProgram };
+    return { CATALOG, ALIASES, SESSION_TYPES, LIFT_ORDER, MOVE_ORDER, MIX_ORDER, MAX_LIFT_DAYS, normalizeMix, mixTotal, liftTotal, mixSummary, DAY_KEYS, WEEKLY_VOLUME, GROUPS, ALTERNATIVES, NUTRITION, GUIDE, PRESETS, EMPHASIS_LIST, GOAL_LABELS, GOAL_MAP, configFromGoals, defaultConfig, buildProgram };
   })();
 
 
@@ -5563,9 +5733,10 @@ function __bootWorkout() {
 
     const {
       buildProgram, defaultConfig,
-      PRESETS, TEMPLATES, EMPHASIS_LIST, ALIASES,
+      PRESETS, EMPHASIS_LIST, ALIASES,
       WEEKLY_VOLUME, NUTRITION, ALTERNATIVES, GROUPS,
-      CARDIO_OPTIONS
+      SESSION_TYPES, LIFT_ORDER, MOVE_ORDER, MIX_ORDER, MAX_LIFT_DAYS,
+      normalizeMix, mixTotal, liftTotal, mixSummary
     } = __data;
     const { lineChart, barRow } = __charts;
     const { fetchBrand, CLIENT_URL } = __link;
@@ -6659,18 +6830,114 @@ function __bootWorkout() {
        το πρόγραμμα κάτω από τα πόδια του. */
     let draft = null;
 
+    const DAY_CHOICES = [2, 3, 4, 5, 6, 7];
+
     function ensureDraft() {
       if (!draft) {
-        draft = { ...state.plan.config, emphasis: [...(state.plan.config.emphasis || [])] };
+        const cfg = state.plan.config;
+        const mix = normalizeMix(cfg);
+        draft = {
+          ...cfg,
+          mix,
+          days: mixTotal(mix),
+          emphasis: [...(cfg.emphasis || [])]
+        };
       }
       return draft;
     }
 
-    const equipmentOptions = [
-      { id: 'gym', label: 'Γυμναστήριο με μηχανήματα' },
-      { id: 'db', label: 'Μόνο αλτήρες και μπάρα' },
-      { id: 'body', label: 'Μόνο το σώμα μου' }
-    ];
+    /* Σύγκριση ρυθμίσεων χωρίς θόρυβο: μετράει μόνο ό,τι αλλάζει όντως
+       το πρόγραμμα. */
+    function configKey(cfg) {
+      const mix = normalizeMix(cfg);
+      return JSON.stringify({
+        preset: cfg.preset,
+        mix: MIX_ORDER.filter((t) => mix[t]).map((t) => [t, mix[t]]),
+        emphasis: [...(cfg.emphasis || [])].sort()
+      });
+    }
+
+    function setMix(type, value) {
+      const next = { ...draft.mix };
+      if (value <= 0) delete next[type];
+      else next[type] = value;
+      draft.mix = next;
+      renderConfig();
+    }
+
+    /* Όταν κατεβάζεις τις μέρες, κόβουμε πρώτα από το καρντιό και το
+       περπάτημα και μετά από τον τύπο με τις περισσότερες μέρες. Μία
+       μέρα με βάρη μένει πάντα. */
+    function trimMix(target) {
+      let guard = 0;
+      while (mixTotal(draft.mix) > target && guard++ < 40) {
+        let hit = MOVE_ORDER.filter((t) => draft.mix[t]).pop();
+        if (!hit && liftTotal(draft.mix) > 1) {
+          hit = LIFT_ORDER.filter((t) => draft.mix[t]).sort((a, b) => draft.mix[b] - draft.mix[a])[0];
+        }
+        if (!hit) break;
+        const v = draft.mix[hit] - 1;
+        const next = { ...draft.mix };
+        if (v <= 0) delete next[hit]; else next[hit] = v;
+        draft.mix = next;
+      }
+    }
+
+    function mixRow(type, remaining) {
+      const def = SESSION_TYPES[type];
+      const n = draft.mix[type] || 0;
+      const lifts = liftTotal(draft.mix);
+      const isLift = def.kind === 'lift';
+
+      const row = document.createElement('div');
+      row.className = 'mix-row';
+      row.dataset.on = String(n > 0);
+      row.innerHTML =
+        `<div class="mix-text"><strong>${esc(def.label)}</strong><span>${esc(def.hint)}</span></div>` +
+        '<div class="mix-step">' +
+        '<button type="button" data-act="dec" aria-label="Μία λιγότερη">−</button>' +
+        `<span class="mix-n">${n}</span>` +
+        '<button type="button" data-act="inc" aria-label="Μία παραπάνω">+</button>' +
+        '</div>';
+
+      const dec = row.querySelector('[data-act="dec"]');
+      const inc = row.querySelector('[data-act="inc"]');
+      dec.disabled = n === 0 || (isLift && lifts <= 1);
+      inc.disabled = remaining <= 0 || (isLift && lifts >= MAX_LIFT_DAYS);
+      dec.addEventListener('click', () => setMix(type, n - 1));
+      inc.addEventListener('click', () => setMix(type, n + 1));
+      return row;
+    }
+
+    function renderMix(remaining) {
+      const host = $('#cfg-mix');
+      if (!host) return;
+      host.innerHTML = '';
+
+      const block = (title, list) => {
+        const head = document.createElement('div');
+        head.className = 'mix-group';
+        head.textContent = title;
+        host.appendChild(head);
+        list.forEach((t) => host.appendChild(mixRow(t, remaining)));
+      };
+
+      block('Στο γυμναστήριο', LIFT_ORDER);
+      block('Εκτός γυμναστηρίου', MOVE_ORDER);
+
+      const hint = $('#cfg-mix-hint');
+      if (!hint) return;
+      const lifts = liftTotal(draft.mix);
+      const moves = mixTotal(draft.mix) - lifts;
+      if (remaining > 0) {
+        hint.textContent = `Μένουν ${remaining} ${remaining === 1 ? 'μέρα' : 'μέρες'} να μοιράσεις.`;
+      } else {
+        hint.textContent =
+          `${lifts} ${lifts === 1 ? 'μέρα' : 'μέρες'} με βάρη` +
+          (moves ? ` και ${moves} ${moves === 1 ? 'μέρα' : 'μέρες'} εκτός γυμναστηρίου.` : '.') +
+          ' Το περπάτημα και το καρντιό δεν γίνονται μέρες στο καρνέ — βγαίνουν ως οδηγία μέσα στην προπόνηση.';
+      }
+    }
 
     function renderConfig() {
       const host = $('#config-panel');
@@ -6683,21 +6950,15 @@ function __bootWorkout() {
         .join('');
 
       const daysSel = $('#cfg-days');
-      daysSel.innerHTML = Object.keys(TEMPLATES)
-        .map((d) => `<option value="${d}"${Number(d) === Number(draft.days) ? ' selected' : ''}>${d} μέρες · ${esc(TEMPLATES[d].label)}</option>`)
+      const choices = DAY_CHOICES.includes(Number(draft.days))
+        ? DAY_CHOICES
+        : [...DAY_CHOICES, Number(draft.days)].sort((a, b) => a - b);
+      daysSel.innerHTML = choices
+        .map((d) => `<option value="${d}"${d === Number(draft.days) ? ' selected' : ''}>${d} μέρες την εβδομάδα</option>`)
         .join('');
 
-      const equipSel = $('#cfg-equip');
-      equipSel.innerHTML = equipmentOptions
-        .map((e) => `<option value="${e.id}"${e.id === draft.equipment ? ' selected' : ''}>${esc(e.label)}</option>`)
-        .join('');
-
-      const cardioSel = $('#cfg-cardio');
-      if (cardioSel) {
-        cardioSel.innerHTML = CARDIO_OPTIONS
-          .map((c) => `<option value="${c.id}"${c.id === (draft.cardio || 'none') ? ' selected' : ''}>${esc(c.label)}</option>`)
-          .join('');
-      }
+      const remaining = Number(draft.days) - mixTotal(draft.mix);
+      renderMix(remaining);
 
       const chips = $('#cfg-emphasis');
       chips.innerHTML = '';
@@ -6730,21 +6991,34 @@ function __bootWorkout() {
               .join(' · ')}</span></div>`;
           })
           .join('') +
+        preview.moves
+          .map((m) => `<div class="preview-day"><strong>${esc(m.name)}</strong><span>${esc(m.text)}</span></div>`)
+          .join('') +
         (preview.note ? `<p class="hint">${esc(preview.note)}</p>` : '');
 
-      const same =
-        JSON.stringify({ ...draft, source: null }) ===
-        JSON.stringify({ ...state.plan.config, source: null });
+      const same = configKey(draft) === configKey(state.plan.config);
       const apply = $('#cfg-apply');
-      apply.disabled = same;
-      apply.textContent = same ? 'Αυτό είναι ήδη το πρόγραμμά σου' : 'Φτιάξε το πρόγραμμά μου';
+      apply.disabled = same || remaining !== 0;
+      apply.textContent = remaining > 0
+        ? `Μοίρασε ακόμα ${remaining} ${remaining === 1 ? 'μέρα' : 'μέρες'}`
+        : same
+          ? 'Αυτό είναι ήδη το πρόγραμμά σου'
+          : 'Φτιάξε το πρόγραμμά μου';
     }
 
     function applyConfig() {
       ensureDraft();
-      const before = JSON.stringify(state.plan.config);
-      state.plan.config = { ...state.plan.config, ...draft };
-      if (before !== JSON.stringify(state.plan.config)) {
+      if (Number(draft.days) !== mixTotal(draft.mix)) return;
+      const before = configKey(state.plan.config);
+      state.plan.config = {
+        ...state.plan.config,
+        preset: draft.preset,
+        mix: { ...draft.mix },
+        days: mixTotal(draft.mix),
+        emphasis: [...draft.emphasis]
+      };
+      delete state.plan.config.cardio;
+      if (before !== configKey(state.plan.config)) {
         savePlan();
         rebuild();
         state.day = suggestedDay();
@@ -6890,9 +7164,11 @@ function __bootWorkout() {
       state.profile = store.read('profile', null);
       state.plan = normalizePlan(store.read('plan', null));
       if (state.editing || state.swapping) return;
+      draft = null;
+      rebuild();
       loadProfile();
       renderAll();
-      renderPlan();
+      renderSettings();
     });
 
     /* ---------- Αναφορά PDF ---------- */
@@ -7326,8 +7602,10 @@ function __bootWorkout() {
         state.measurements = store.read('measurements', []);
         state.profile = store.read('profile', null);
         state.plan = normalizePlan(store.read('plan', null));
+        draft = null;
+        rebuild();
         renderAll();
-        renderPlan();
+        renderSettings();
         setStatus($('#data-status'), 'Τα δεδομένα φορτώθηκαν.', true);
       } catch (err) {
         setStatus($('#data-status'), 'Το αρχείο δεν διαβάστηκε: ' + err.message, false);
@@ -7359,29 +7637,17 @@ function __bootWorkout() {
     }
 
     on('#cfg-preset', 'change', (e) => {
+      ensureDraft();
       draft.preset = e.target.value;
       draft.source = 'manual';
-      const p = PRESETS[draft.preset];
-      if (p && !draft.daysTouched) draft.days = p.days;
       renderConfig();
     });
 
     on('#cfg-days', 'change', (e) => {
+      ensureDraft();
       draft.days = Number(e.target.value);
-      draft.daysTouched = true;
       draft.source = 'manual';
-      renderConfig();
-    });
-
-    on('#cfg-equip', 'change', (e) => {
-      draft.equipment = e.target.value;
-      draft.source = 'manual';
-      renderConfig();
-    });
-
-    on('#cfg-cardio', 'change', (e) => {
-      draft.cardio = e.target.value;
-      draft.source = 'manual';
+      trimMix(draft.days);
       renderConfig();
     });
 
