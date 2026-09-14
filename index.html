@@ -322,7 +322,7 @@ body.mode-workout {
    άνετα ο αντίχειρας. */
 .daystrip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
   gap: 8px;
   margin: 16px 0 6px;
 }
@@ -339,6 +339,10 @@ body.mode-workout {
 }
 
 .daybtn:hover { border-color: var(--muted); }
+
+/* Μέρα εκτός γυμναστηρίου: διακεκομμένο περίγραμμα, ώστε να ξεχωρίζει
+   με μια ματιά από τις μέρες με βάρη. */
+.daybtn[data-kind="move"] { border-style: dashed; }
 
 .daybtn .letter {
   font-family: var(--display);
@@ -4574,7 +4578,7 @@ function __bootWorkout() {
     const LIFT_ORDER = ['full', 'upper', 'lower', 'push', 'pull', 'legs'];
     const MOVE_ORDER = ['walk', 'cardio'];
     const MIX_ORDER = [...LIFT_ORDER, ...MOVE_ORDER];
-    const GREEK_LETTERS = ['Α', 'Β', 'Γ', 'Δ', 'Ε', 'ΣΤ'];
+    const GREEK_LETTERS = ['Α', 'Β', 'Γ', 'Δ', 'Ε', 'ΣΤ', 'Ζ'];
     const MAX_LIFT_DAYS = 6;
 
     const mixTotal = (mix) => MIX_ORDER.reduce((s, t) => s + (Number(mix[t]) || 0), 0);
@@ -4630,13 +4634,17 @@ function __bootWorkout() {
       return base;
     }
 
-    /* Η σειρά της εβδομάδας: εναλλάξ ανάμεσα στους τύπους, ώστε δύο ίδιες
-       μέρες να μην πέφτουν κολλητά (Άνω Α · Κάτω Α · Άνω Β · Κάτω Β). */
-    function weekPlan(mix) {
+    /* Η σειρά της εβδομάδας. Δύο δουλειές:
+       α) εναλλάσσει τις παραλλαγές μέσα σε κάθε τύπο, ώστε δύο ίδιες
+          μέρες να μην πέφτουν κολλητά (Άνω Α · Κάτω Α · Άνω Β · Κάτω Β)·
+       β) μοιράζει τις μέρες εκτός γυμναστηρίου ανάμεσα στις μέρες με
+          βάρη, αντί να τις στοιβάζει στο τέλος: Full body · Περπάτημα ·
+          Full body · Περπάτημα · Full body. */
+    function queueOf(order, mix, max) {
       const left = {};
-      LIFT_ORDER.forEach((t) => { if (mix[t]) left[t] = mix[t]; });
+      order.forEach((t) => { if (mix[t]) left[t] = Math.min(mix[t], max); });
       const types = Object.keys(left);
-      const total = types.reduce((s, t) => s + left[t], 0);
+      const total = types.reduce((sum, t) => sum + left[t], 0);
       const seen = {};
       const out = [];
       let guard = 0;
@@ -4645,15 +4653,35 @@ function __bootWorkout() {
           if (!left[t] || out.length >= total) return;
           const i = seen[t] || 0;
           const variants = SESSION_TYPES[t].variants;
-          out.push({ type: t, index: i, variant: variants[i % variants.length] });
+          out.push({ type: t, index: i, variant: variants ? variants[i % variants.length] : null });
           seen[t] = i + 1;
           left[t]--;
         });
       }
-      return out.slice(0, MAX_LIFT_DAYS);
+      return out;
     }
 
-    const DAY_KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
+    function weekPlan(mix) {
+      const lifts = queueOf(LIFT_ORDER, mix, MAX_LIFT_DAYS).slice(0, MAX_LIFT_DAYS);
+      const moves = queueOf(MOVE_ORDER, mix, 7).slice(0, Math.max(0, 7 - lifts.length));
+      const n = lifts.length;
+      const m = moves.length;
+      if (!m) return lifts;
+      if (!n) return moves;
+
+      /* Ποιος παίρνει σειρά κάθε φορά: όποιος βρίσκεται πιο πίσω σε σχέση
+         με το μερίδιο που του αναλογεί μέσα στην εβδομάδα. */
+      const out = [];
+      let li = 0;
+      let mi = 0;
+      while (li < n || mi < m) {
+        if (mi >= m || (li < n && (li + 0.5) / n <= (mi + 0.5) / m)) out.push(lifts[li++]);
+        else out.push(moves[mi++]);
+      }
+      return out;
+    }
+
+    const DAY_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
     /* Όγκος ανά μυϊκή ομάδα την εβδομάδα, για τον έλεγχο στην καρτέλα Πρόοδος. */
     const WEEKLY_VOLUME = [
@@ -5033,23 +5061,27 @@ function __bootWorkout() {
     }
 
     /* ---------- Περπάτημα και καρντιό ----------
-       Δεν μπαίνουν στα σετ: δεν έχουν κιλά και επαναλήψεις να
-       καταγράψεις. Βγαίνουν ως οδηγία κάτω από τις ασκήσεις της ημέρας,
-       με τους αριθμούς που έβαλε ο ίδιος στο μείγμα της εβδομάδας. */
-    function cardioFromMix(mix) {
-      const w = Number(mix.walk) || 0;
-      const c = Number(mix.cardio) || 0;
-      if (!w && !c) return null;
-      const lines = [];
-      if (w) lines.push(`${w} ${w === 1 ? 'μέρα' : 'μέρες'} περπάτημα την εβδομάδα: 30–45 λεπτά ή 8.000–10.000 βήματα.`);
-      if (c) lines.push(`${c} ${c === 1 ? 'φορά' : 'φορές'} καρντιό: 20–40 λεπτά ποδήλατο ή ελλειπτικό, σε ρυθμό που σου επιτρέπει να μιλάς.`);
-      lines.push(
-        w && c
-          ? 'Κράτησέ τα σε μέρες χωρίς βάρη. Αν πέσουν την ίδια μέρα, πρώτα τα βάρη.'
-          : 'Βάλ\' το σε μέρα χωρίς βάρη. Αν πέσει την ίδια μέρα με τα βάρη, πρώτα τα βάρη.'
-      );
-      return { title: w && c ? 'Περπάτημα και καρντιό' : w ? 'Περπάτημα' : 'Καρντιό', lines };
-    }
+       Είναι κανονικές μέρες της εβδομάδας, αλλά χωρίς σετ: δεν έχουν
+       κιλά και επαναλήψεις να καταγράψεις. Αντί για λίστα ασκήσεων
+       παίρνουν οδηγία. */
+    const MOVE_GUIDE = {
+      walk: {
+        focus: 'Εκτός γυμναστηρίου',
+        lines: [
+          '30–45 λεπτά περπάτημα ή 8.000–10.000 βήματα μέσα στην ημέρα.',
+          'Ρυθμός που σου επιτρέπει να μιλάς. Δεν κουράζει τα πόδια για την επόμενη προπόνηση.',
+          'Δεν χρειάζεται να γίνει μονοκόμματα — μετράει και σπασμένο σε δύο ή τρεις βόλτες.'
+        ]
+      },
+      cardio: {
+        focus: 'Εκτός γυμναστηρίου',
+        lines: [
+          '20–40 λεπτά ποδήλατο ή ελλειπτικό, σε σταθερό ρυθμό.',
+          'Αρκετά ήπιο ώστε να μπορείς να μιλάς. Ποδήλατο ή ελλειπτικό αντί για τρέξιμο — κουράζει λιγότερο τα πόδια.',
+          'Αν πέσει την ίδια μέρα με βάρη, πρώτα τα βάρη.'
+        ]
+      }
+    };
 
     /* Η άσκηση όπως θα τη δει ο χρήστης: κατάλογος + το preset από πάνω. */
     function shape(id, preset) {
@@ -5085,14 +5117,31 @@ function __bootWorkout() {
       const counts = {};
       week.forEach((w) => { counts[w.type] = (counts[w.type] || 0) + 1; });
 
-      const plan = week.map((w, i) => ({
-        letter: GREEK_LETTERS[i],
-        name: counts[w.type] > 1
-          ? `${SESSION_TYPES[w.type].label} ${GREEK_LETTERS[w.index]}`
-          : SESSION_TYPES[w.type].label,
-        focus: w.variant.focus,
-        slots: [...w.variant.slots]
-      }));
+      const plan = week.map((w, i) => {
+        const def = SESSION_TYPES[w.type];
+        const name = counts[w.type] > 1 && def.kind === 'lift'
+          ? `${def.label} ${GREEK_LETTERS[w.index]}`
+          : def.label;
+        if (def.kind === 'move') {
+          const guide = MOVE_GUIDE[w.type] || { focus: 'Εκτός γυμναστηρίου', lines: [] };
+          return {
+            letter: GREEK_LETTERS[i],
+            name,
+            focus: guide.focus,
+            kind: 'move',
+            moveType: w.type,
+            guide: guide.lines,
+            slots: []
+          };
+        }
+        return {
+          letter: GREEK_LETTERS[i],
+          name,
+          focus: w.variant.focus,
+          kind: 'lift',
+          slots: [...w.variant.slots]
+        };
+      });
 
       /* Οι ασκήσεις της έμφασης μπαίνουν στο τέλος της ημέρας που έχει
          ήδη τις λιγότερες — και μόνο αν δεν υπάρχουν ήδη εκεί. */
@@ -5100,13 +5149,13 @@ function __bootWorkout() {
         const extra = (EMPHASIS[e] && EMPHASIS[e].add) || [];
         extra.forEach((id) => {
           const group = CATALOG[id] && CATALOG[id].group;
-          const free = plan.filter((d) => !d.slots.includes(id) && d.slots.length < 8);
+          const free = plan.filter((d) => d.kind === 'lift' && !d.slots.includes(id) && d.slots.length < 8);
           if (!free.length) return;
           /* Προτίμησε μέρα που ήδη δουλεύει την ίδια περιοχή: το Pallof
              press δεν έχει νόημα να προσγειωθεί σε μέρα ποδιών επειδή
              έτυχε να είναι η πιο μικρή. */
           const fitting = free.filter((d) =>
-            d.slots.some((s) => CATALOG[s] && CATALOG[s].group === group)
+            d.slots.some((x) => CATALOG[x] && CATALOG[x].group === group)
           );
           const pool = fitting.length ? fitting : free;
           pool.sort((a, b) => a.slots.length - b.slots.length)[0].slots.push(id);
@@ -5119,6 +5168,20 @@ function __bootWorkout() {
       plan.forEach((d, i) => {
         const key = DAY_KEYS[i];
         order.push(key);
+
+        if (d.kind === 'move') {
+          program[key] = {
+            letter: d.letter,
+            name: d.name,
+            focus: d.focus,
+            kind: 'move',
+            moveType: d.moveType,
+            guide: d.guide,
+            exercises: []
+          };
+          return;
+        }
+
         const seen = new Set();
         const exercises = [];
 
@@ -5148,33 +5211,25 @@ function __bootWorkout() {
           letter: d.letter,
           name: d.name,
           focus: d.focus,
+          kind: 'lift',
           exercises
         };
       });
 
-      /* Οι μέρες εκτός γυμναστηρίου δεν γίνονται ημέρες του καρνέ — δεν
-         έχουν σετ να καταγράψεις. Φαίνονται στην προεπισκόπηση και ως
-         οδηγία μέσα στην προπόνηση. */
-      const moves = MOVE_ORDER
-        .filter((t) => mix[t])
-        .map((t) => ({
-          name: `${SESSION_TYPES[t].label} ×${mix[t]}`,
-          text: SESSION_TYPES[t].hint
-        }));
-
-      const mainLift = week.length ? week[0].type : 'full';
+      const liftDays = plan.filter((d) => d.kind === 'lift').length;
+      const mainLift = (plan.find((d) => d.kind === 'lift') || {}).type
+        || (week.find((w) => SESSION_TYPES[w.type].kind === 'lift') || {}).type
+        || 'full';
 
       return {
         program,
         order,
         mix,
-        moves,
-        days: mixTotal(mix),
-        liftDays: week.length,
+        days: order.length,
+        liftDays,
         preset: cfg.preset,
         label: `${preset.label} · ${mixSummary(mix)}`,
         note: preset.note || (SESSION_TYPES[mainLift] || {}).note || '',
-        cardio: cardioFromMix(mix),
         nutritionGoal: preset.nutrition
       };
     }
@@ -6002,7 +6057,10 @@ function __bootWorkout() {
 
     function renderMasthead() {
       const wk = weekNumber();
-      const doneCount = state.sessions.filter((s) => s.done).length;
+      /* Οι μέρες εκτός γυμναστηρίου δεν μετράνε ως προπονήσεις. */
+      const doneCount = state.sessions.filter(
+        (s) => s.done && (PROGRAM[s.day] || {}).kind !== 'move'
+      ).length;
       if (wk == null) {
         $('#week-count').textContent = '0';
         $('#week-label').textContent = 'προπονήσεις';
@@ -6023,9 +6081,11 @@ function __bootWorkout() {
         const btn = document.createElement('button');
         btn.className = 'daybtn';
         btn.setAttribute('aria-pressed', String(state.day === d));
+        const meta = day.kind === 'move' ? day.name : day.focus.split(' · ')[0];
+        btn.dataset.kind = day.kind || 'lift';
         btn.innerHTML =
           `<span class="letter">${day.letter}${s && s.done ? '<span class="done"></span>' : ''}</span>` +
-          `<span class="meta">${day.focus.split(' · ')[0]}</span>`;
+          `<span class="meta">${esc(meta)}</span>`;
         btn.addEventListener('click', () => {
           state.day = d;
           state.editing = null;
@@ -6044,6 +6104,23 @@ function __bootWorkout() {
       const list = $('#exercise-list');
       list.innerHTML = '';
       const session = sessionFor(today(), state.day);
+
+      /* Μέρα εκτός γυμναστηρίου: οδηγία, όχι σετ. Κλείνει κι αυτή, ώστε
+         η ρότα της εβδομάδας να προχωράει κανονικά. */
+      if (day.kind === 'move') {
+        const box = document.createElement('div');
+        box.className = 'cardio-note';
+        box.innerHTML =
+          `<h3>${esc(day.name)}</h3>` +
+          (day.guide || []).map((l) => `<p>${esc(l)}</p>`).join('');
+        list.appendChild(box);
+
+        const finishMove = $('#finish-session');
+        finishMove.textContent =
+          session && session.done ? 'Η μέρα είναι κλεισμένη' : 'Κλείσε τη σημερινή μέρα';
+        finishMove.disabled = !!(session && session.done);
+        return;
+      }
 
       dayExercises(state.day).forEach((ex) => {
         const entries = ((session && session.entries[ex.id]) || []).slice(0, ex.sets);
@@ -6134,18 +6211,6 @@ function __bootWorkout() {
       add.textContent = '+ Πρόσθεσε άσκηση σε αυτή την ημέρα';
       add.addEventListener('click', () => addExercise(state.day));
       list.appendChild(add);
-
-      /* Περπάτημα και καρντιό: οδηγία, όχι άσκηση με σετ. Φαίνεται μόνο
-         αν το έχει διαλέξει στις Ρυθμίσεις. */
-      const cardio = BUILD && BUILD.cardio;
-      if (cardio) {
-        const box = document.createElement('div');
-        box.className = 'cardio-note';
-        box.innerHTML =
-          `<h3>${esc(cardio.title)}</h3>` +
-          cardio.lines.map((l) => `<p>${esc(l)}</p>`).join('');
-        list.appendChild(box);
-      }
 
       const finish = $('#finish-session');
       finish.textContent =
@@ -6440,11 +6505,14 @@ function __bootWorkout() {
     }
 
     $('#finish-session').addEventListener('click', () => {
-      const session = sessionFor(today(), state.day);
-      if (!session || !Object.keys(session.entries).length) {
+      const day = PROGRAM[state.day] || {};
+      const isMove = day.kind === 'move';
+      let session = sessionFor(today(), state.day);
+      if (!isMove && (!session || !Object.keys(session.entries).length)) {
         alert('Καταχώρησε τουλάχιστον ένα σετ πριν κλείσεις την προπόνηση.');
         return;
       }
+      if (!session) session = ensureSession(today(), state.day);
       session.done = true;
       save('sessions');
       stopTimer();
@@ -6934,8 +7002,9 @@ function __bootWorkout() {
       } else {
         hint.textContent =
           `${lifts} ${lifts === 1 ? 'μέρα' : 'μέρες'} με βάρη` +
-          (moves ? ` και ${moves} ${moves === 1 ? 'μέρα' : 'μέρες'} εκτός γυμναστηρίου.` : '.') +
-          ' Το περπάτημα και το καρντιό δεν γίνονται μέρες στο καρνέ — βγαίνουν ως οδηγία μέσα στην προπόνηση.';
+          (moves
+            ? ` και ${moves} ${moves === 1 ? 'μέρα' : 'μέρες'} εκτός γυμναστηρίου. Μοιράζονται ανάμεσα στις προπονήσεις, δεν στοιβάζονται στο τέλος.`
+            : '.');
       }
     }
 
@@ -6986,13 +7055,12 @@ function __bootWorkout() {
         preview.order
           .map((d) => {
             const day = preview.program[d];
-            return `<div class="preview-day"><strong>${esc(day.name)}</strong><span>${day.exercises
-              .map((e) => esc(e.name))
-              .join(' · ')}</span></div>`;
+            const text = day.kind === 'move'
+              ? (day.guide || [])[0] || ''
+              : day.exercises.map((e) => e.name).join(' · ');
+            return `<div class="preview-day"><strong>${esc(day.letter)} · ${esc(day.name)}</strong>` +
+              `<span>${esc(text)}</span></div>`;
           })
-          .join('') +
-        preview.moves
-          .map((m) => `<div class="preview-day"><strong>${esc(m.name)}</strong><span>${esc(m.text)}</span></div>`)
           .join('') +
         (preview.note ? `<p class="hint">${esc(preview.note)}</p>` : '');
 
