@@ -2492,10 +2492,12 @@ async function exportCredits({ clientId, name, flash, onAuthFail }) {
   }
 }
 
-/* Πίτα με τρία κομμάτια: μαύρο οι διαθέσιμες, μεσαίο γκρι οι
-   κρατημένες (κλεισμένες ώρες που δεν έχουν γίνει ακόμα), ανοιχτό γκρι
-   οι χρησιμοποιημένες. Τα χρώματα περνάνε από text-* ώστε να τα
-   γυρίζει και το σκούρο θέμα. */
+/* Πίτα με τρία κομμάτια: μαύρο οι διαθέσιμες, κίτρινο οι κρατημένες
+   (κλεισμένες ώρες που δεν έχουν γίνει ακόμα), γκρι οι
+   χρησιμοποιημένες. Το μαύρο και το γκρι περνάνε από text-* ώστε να τα
+   γυρίζει το σκούρο θέμα· το κίτρινο μένει ίδιο και στα δύο. */
+const CREDIT_HELD_COLOR = "#EAB308";
+
 function CreditsPie({ total, used, held, size = 180 }) {
   const safeTotal = Math.max(0, Number(total) || 0);
   const safeUsed = Math.min(safeTotal, Math.max(0, Number(used) || 0));
@@ -2506,7 +2508,7 @@ function CreditsPie({ total, used, held, size = 180 }) {
   const pct = (n) => (safeTotal ? (n / safeTotal) * 100 : 0);
   const parts = [
     { n: left, cls: "text-black" },
-    { n: safeHeld, cls: "text-neutral-500" },
+    { n: safeHeld, cls: "", color: CREDIT_HELD_COLOR },
     { n: done, cls: "text-neutral-300" },
   ];
   let acc = 0;
@@ -2520,7 +2522,7 @@ function CreditsPie({ total, used, held, size = 180 }) {
           acc += slice;
           if (slice <= 0) return null;
           return (
-            <circle key={i} cx="21" cy="21" r={r} fill="none" stroke="currentColor" strokeWidth="6"
+            <circle key={i} cx="21" cy="21" r={r} fill="none" stroke={p.color || "currentColor"} strokeWidth="6"
               className={p.cls}
               strokeDasharray={`${slice} ${100 - slice}`} strokeDashoffset={offset} />
           );
@@ -2609,7 +2611,7 @@ function CreditsPanel({ client, flash, onAuthFail, onUpdated }) {
             </div>
             <div className="flex items-center justify-between gap-3 border-b border-neutral-200 pb-2">
               <span className="flex items-center gap-2 f-text text-[14px]">
-                <span className="inline-block h-3.5 w-3.5 text-neutral-500" style={{ background: "currentColor" }} />
+                <span className="inline-block h-3.5 w-3.5" style={{ background: CREDIT_HELD_COLOR }} />
                 Κρατημένες
               </span>
               <span className="f-mono text-[18px]">{held}</span>
