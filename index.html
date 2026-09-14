@@ -2949,8 +2949,9 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
   const [chatUnread, setChatUnread] = useState(0);
   const markChatRead = useCallback(() => setChatUnread(0), []);
   const [chatOn, setChatOn] = useState(CHAT_ENABLED);
-  /* Το πακέτο κρατήσεων. null = χωρίς όριο (δεν το έχει ορίσει η
-     γραμματεία). Το upcoming χρειάζεται για την κλειδωμένη οθόνη:
+  /* Το πακέτο κρατήσεων. active:false = δεν έχει ανανεώσει στη
+     γραμματεία, οπότε δεν κλείνει τίποτα — το ίδιο απορρίπτει και ο
+     διακομιστής. Το upcoming χρειάζεται για την κλειδωμένη οθόνη:
      όποιος έχει ήδη κλείσει ώρα πρέπει να μπορεί να τη δει και να
      κάνει check-in. */
   const [credits, setCredits] = useState(null);
@@ -2966,7 +2967,10 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
      Το πλήρες παράθυρο βγαίνει μόνο όταν δεν του έμεινε καμία ώρα. */
   const outOfCredits = !!credits && credits.remaining <= 0;
   const hasAhead = upcoming.some((b) => b.status === "booked");
-  const lockBook = outOfCredits && !hasAhead;
+  /* Χωρίς ενεργή συνδρομή το Πρόγραμμα κλειδώνει πάντα — ακόμα κι αν
+     έχει κλεισμένες ώρες από παλιό πακέτο. */
+  const noPackage = !!credits && credits.active === false;
+  const lockBook = noPackage || (outOfCredits && !hasAhead);
   const chatOnRef = React.useRef(chatOn);
   useEffect(() => { chatOnRef.current = chatOn; }, [chatOn]);
 
@@ -3445,6 +3449,19 @@ function ChatTab({ session, flash, onRead, onClosed }) {
    ============================================================ */
 function CreditsBadge({ credits }) {
   if (!credits) return null;
+  /* Χωρίς πακέτο δεν έχει νόημα το «0/0» — λέμε τι λείπει. */
+  if (credits.active === false) {
+    return (
+      <div className="shrink-0 border border-[#C81E1E] px-3 py-2 text-center"
+        aria-label="Δεν υπάρχει ενεργή συνδρομή">
+        <div className="f-text text-[10px] uppercase leading-none text-neutral-400">Συνδρομή</div>
+        <div className="f-display mt-1 whitespace-nowrap text-[15px] font-bold leading-none text-[#C81E1E]">
+          Ανενεργή
+        </div>
+        <div className="f-text mt-1 text-[10px] leading-none text-neutral-400">γραμματεία</div>
+      </div>
+    );
+  }
   const empty = credits.remaining <= 0;
   return (
     <div className={`shrink-0 border px-3 py-2 text-center ${empty ? "border-[#C81E1E]" : "border-black"}`}
@@ -3463,19 +3480,26 @@ function CreditsBadge({ credits }) {
    κλειδώνει το Πρόγραμμα. Αν έχει ακόμα κλεισμένες ώρες, βλέπει την
    μπάρα του BookTab αντί γι' αυτό. */
 function OutOfCredits({ credits, hasUpcoming, hasToday, chatOn, onGo }) {
+  /* Δύο διαφορετικές καταστάσεις: δεν έχει ανοίξει ποτέ πακέτο, ή το
+     τελείωσε. Το δεύτερο θέλει γιορτή, το πρώτο οδηγίες. */
+  const noPackage = credits.active === false;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 px-5 py-6"
       role="dialog" aria-modal="true">
       <div className="w-full max-w-sm border border-black bg-white p-6 text-center">
-        <div className="text-[46px] leading-none">😕</div>
+        <div className="text-[46px] leading-none">{noPackage ? "🔒" : "😕"}</div>
         <div className="f-display mt-3 text-[26px] font-extrabold uppercase leading-tight tracking-tight">
-          Ξέμεινες από κρατήσεις;
+          {noPackage ? "Η συνδρομή σου δεν είναι ενεργή" : "Ξέμεινες από κρατήσεις;"}
         </div>
         <p className="f-text mt-3 text-[15px] leading-relaxed text-neutral-600">
-          Ανανέωσε τη συνδρομή σου στη γραμματεία για να ξαναγεμίσεις τις κρατήσεις σου! 🎉🥳
+          {noPackage
+            ? "Ο λογαριασμός σου δημιουργήθηκε, αλλά για να κλείνεις ώρες χρειάζεται πρώτα να περάσεις από τη γραμματεία και να ενεργοποιήσεις το πακέτο σου."
+            : "Ανανέωσε τη συνδρομή σου στη γραμματεία για να ξαναγεμίσεις τις κρατήσεις σου! 🎉🥳"}
         </p>
         <div className="f-mono mt-4 text-[13px] text-neutral-400">
-          {credits.used} από {credits.total} χρησιμοποιήθηκαν
+          {noPackage
+            ? "Καμία διαθέσιμη κράτηση"
+            : `${credits.used} από ${credits.total} χρησιμοποιήθηκαν`}
         </div>
 
         <div className="mt-5 space-y-2">
@@ -3507,7 +3531,8 @@ function BookTab({ session, flash, credits, hasAhead, onMine }) {
   /* Έκλεισε όλες τις ώρες του πακέτου. Βλέπει το πρόγραμμα και μπορεί
      να ακυρώσει, αλλά όχι να κλείσει νέα ώρα ή να μπει σε αναμονή —
      το ίδιο απορρίπτει και ο διακομιστής. */
-  const noCredits = !!credits && credits.remaining <= 0;
+  const noCredits = !!credits && (credits.remaining <= 0 || credits.active === false);
+  const noPackage = !!credits && credits.active === false;
 
   const days = useMemo(() => {
     const base = new Date(); base.setHours(0, 0, 0, 0);
@@ -3600,10 +3625,14 @@ function BookTab({ session, flash, credits, hasAhead, onMine }) {
       {noCredits && (
         <div className="shrink-0 border-b border-black bg-neutral-100 px-5 py-3" role="status">
           <div className="f-display text-[15px] font-bold leading-snug">
-            {hasAhead ? "Έκλεισες όλες τις ώρες του πακέτου σου 💪" : "Τελείωσε το πακέτο σου"}
+            {noPackage
+              ? "Η συνδρομή σου δεν είναι ενεργή 🔒"
+              : hasAhead ? "Έκλεισες όλες τις ώρες του πακέτου σου 💪" : "Τελείωσε το πακέτο σου"}
           </div>
           <p className="f-text mt-1 text-[13px] leading-relaxed text-neutral-600">
-            {hasAhead
+            {noPackage
+              ? "Πέρασε από τη γραμματεία για ανανέωση. Μέχρι τότε δεν μπορείς να κλείσεις ώρα."
+              : hasAhead
               ? "Αν ακυρώσεις μία, σου επιστρέφεται και μπορείς να κλείσεις άλλη. Για περισσότερες, ανανέωσε στη γραμματεία."
               : "Ανανέωσε στη γραμματεία για να κλείσεις νέες ώρες."}
           </p>

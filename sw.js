@@ -35,7 +35,7 @@ const CDN_HOSTS = [
   "unpkg.com",
   "cdn.tailwindcss.com",
   "cdnjs.cloudflare.com",  /* pdfmake: οι εκτυπώσεις της διαχείρισης */
-  "esm.sh",                /* δεν χρησιμοποιείται πια· μένει για παλιές καρτέλες */
+  "esm.sh",                /* supabase-js: ο συγχρονισμός του καρνέ */
   "fonts.googleapis.com",
   "fonts.gstatic.com",
 ];
