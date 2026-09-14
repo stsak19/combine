@@ -497,6 +497,19 @@ body.mode-workout {
   margin-top: 2px;
 }
 
+.ex-top > div:first-child { min-width: 0; }
+
+/* Δεξιά στήλη: το ταμπελάκι της μυϊκής ομάδας πάνω, το κουμπί αλλαγής
+   ακριβώς από κάτω — ίδια δεξιά ευθυγράμμιση και στα δύο, ώστε όλες οι
+   κάρτες να δείχνουν ομοιόμορφες. */
+.ex-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .ex-group {
   font-size: 11.5px;
   color: var(--accent);
@@ -505,6 +518,41 @@ body.mode-workout {
   padding: 2px 9px;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* Κουμπί αλλαγής άσκησης: πραγματικό κουμπί με περίγραμμα και το
+   σύμβολο εναλλαγής, όχι σκέτο κείμενο στην άκρη. */
+.ex-swap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface-sunk);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: border-color 0.14s, color 0.14s, background 0.14s;
+}
+
+.ex-swap .ico {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.ex-swap:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.ex-swap[aria-expanded='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 /* Η άσκηση-κλειδί έχει ίδιο ταμπελάκι με τις υπόλοιπες — ξεχωρίζει από
@@ -2609,148 +2657,6 @@ function QrScanner({ onClose, onFound }) {
 
 /* Όλες οι ρυθμίσεις της συσκευής και του λογαριασμού, από το
    γρανάζι πάνω δεξιά. */
-/* Οι στόχοι του πελάτη. Τα κλειδιά είναι ακριβώς αυτά που δέχεται η
-   goal_keys() στη βάση — ό,τι δεν ανήκει εκεί το πετάει η save_goals.
-   Τα ίδια κλειδιά διαβάζει και το καρνέ (GOAL_LABELS / GOAL_MAP) για να
-   διαλέξει μόνο του πρόγραμμα και διατροφή. */
-const GOAL_GROUPS = [
-  ["Σώμα", [
-    ["weight_loss", "Απώλεια βάρους"],
-    ["muscle_gain", "Αύξηση μυϊκής μάζας"],
-    ["toning", "Γράμμωση / σύσφιξη"],
-    ["maintain", "Διατήρηση φόρμας"],
-  ]],
-  ["Απόδοση", [
-    ["strength", "Αύξηση δύναμης"],
-    ["endurance", "Καλύτερη αντοχή"],
-    ["flexibility", "Ευλυγισία και κινητικότητα"],
-    ["core", "Ισορροπία και σταθερότητα κορμού"],
-    ["event_prep", "Προετοιμασία για αγώνα"],
-  ]],
-  ["Υγεία", [
-    ["posture", "Καλύτερη στάση σώματος"],
-    ["pain_relief", "Λιγότεροι πόνοι στη μέση ή τον αυχένα"],
-    ["injury_recovery", "Επιστροφή μετά από τραυματισμό"],
-  ]],
-  ["Καθημερινότητα", [
-    ["stress", "Λιγότερο άγχος, καλύτερη διάθεση"],
-    ["sleep", "Καλύτερος ύπνος"],
-    ["energy", "Ενέργεια για την καθημερινότητα"],
-    ["routine", "Σταθερή ρουτίνα άσκησης"],
-    ["classes", "Ομαδικά μαθήματα και παρέα"],
-  ]],
-];
-
-/* Τι θέλει ο πελάτης από το γυμναστήριο. Το βλέπει η διαχείριση
-   συγκεντρωτικά και το χρησιμοποιεί το καρνέ για να στήσει πρόγραμμα
-   και διατροφή χωρίς να ξαναρωτήσει. */
-function GoalsPanel({ session, flash }) {
-  const [picked, setPicked] = useState([]);
-  const [other, setOther] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [sent, setSent] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data, error } = await sb.rpc("my_goals", { p_client_id: session.clientId });
-      if (!alive) return;
-      if (!error && data) {
-        const list = Array.isArray(data.goals) ? data.goals : [];
-        setPicked(list);
-        setOther(data.other || "");
-        setSent(list.length > 0 || !!(data.other || "").trim());
-      }
-      setLoaded(true);
-    })();
-    return () => { alive = false; };
-  }, [session.clientId]);
-
-  const toggle = (key) => {
-    setDirty(true);
-    setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
-  };
-
-  const save = async () => {
-    setSaving(true);
-    const { data, error } = await sb.rpc("save_goals", {
-      p_client_id: session.clientId,
-      p_goals: picked,
-      p_other: other.trim() || null,
-    });
-    setSaving(false);
-    if (error || !data || data.ok !== true) {
-      flash((data && data.error) || "Δεν αποθηκεύτηκαν");
-      return;
-    }
-    setDirty(false);
-    setSent(true);
-    /* Αν το καρνέ είναι ήδη ανοιχτό, να τους ξαναδιαβάσει. */
-    try { window.dispatchEvent(new CustomEvent("lean:goals")); } catch (e) { /* αγνόησε */ }
-    flash("Οι στόχοι σου αποθηκεύτηκαν");
-  };
-
-  return (
-    <div className="mt-10 border border-black p-4">
-      <div className="f-display text-[14px] font-bold uppercase tracking-wide">Οι στόχοι σου</div>
-      <p className="f-text mt-2 text-[13px] leading-relaxed text-neutral-600">
-        Διάλεξε όσα σε αφορούν. Βοηθάει τον γυμναστή να ξέρει τι ψάχνεις,
-        και το καρνέ προπόνησης στήνει μόνο του πρόγραμμα και διατροφή
-        πάνω σε αυτά. Τα αλλάζεις όποτε θέλεις.
-      </p>
-
-      {!loaded ? (
-        <div className="f-text py-6 text-[13px] text-neutral-400">Φόρτωση…</div>
-      ) : (
-        <>
-          {GOAL_GROUPS.map(([group, items]) => (
-            <div key={group} className="mt-5">
-              <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-                {group}
-              </div>
-              <div className="mt-2 border border-black">
-                {items.map(([key, label], i) => {
-                  const on = picked.includes(key);
-                  return (
-                    <button key={key} onClick={() => toggle(key)} aria-pressed={on}
-                      className={`f-text flex w-full items-center gap-3 px-3 py-2.5 text-left text-[14px] leading-snug ${
-                        i > 0 ? "border-t border-black" : ""} ${
-                        on ? "bg-black text-white" : "bg-white text-black"}`}>
-                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center border text-[11px] leading-none ${
-                        on ? "border-white" : "border-black"}`}>
-                        {on ? "✕" : ""}
-                      </span>
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          <div className="mt-5">
-            <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-              Κάτι άλλο
-            </div>
-            <input value={other} maxLength={120}
-              onChange={(e) => { setOther(e.target.value); setDirty(true); }}
-              placeholder="Προαιρετικό"
-              className="f-text mt-2 w-full border border-black bg-white p-3 text-[14px] outline-none" />
-          </div>
-
-          <div className="mt-5">
-            <Button size="lg" disabled={saving || (!dirty && sent)} onClick={save}>
-              {saving ? "Αποθήκευση…" : !dirty && sent ? "Αποθηκευμένα" : "Αποθήκευση"}
-            </Button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDeleted }) {
   return (
     <div className="h-full overflow-y-auto px-5">
@@ -2772,8 +2678,6 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
           Το «Αυτόματο» ακολουθεί τη ρύθμιση του κινητού σου.
         </p>
       </div>
-
-      <GoalsPanel session={session} flash={flash} />
 
       <PushPanel session={session} flash={flash} />
 
@@ -3111,8 +3015,7 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
       /* Διαβάστηκαν — φεύγουν από τη διεύθυνση. Αλλιώς κάθε ανανέωση
          ξαναγύριζε στο check-in και το κλειδί της κάρτας έμενε στο
          ιστορικό του browser. */
-      if (params.has("checkin") || params.has("card") ||
-          params.has("chat") || params.has("workout")) {
+      if (params.has("checkin") || params.has("card") || params.has("chat")) {
         window.history.replaceState(null, "", window.location.pathname + window.location.hash);
       }
     } catch (e) { /* ignore */ }
@@ -5189,8 +5092,7 @@ function __bootWorkout() {
       stress: 'Λιγότερο άγχος',
       sleep: 'Καλύτερος ύπνος',
       energy: 'Ενέργεια για την καθημερινότητα',
-      routine: 'Σταθερή ρουτίνα άσκησης',
-      classes: 'Ομαδικά μαθήματα και παρέα'
+      routine: 'Σταθερή ρουτίνα άσκησης'
     };
 
     const GOAL_MAP = {
@@ -5209,8 +5111,7 @@ function __bootWorkout() {
       stress:          { preset: 'maintain',  rank: 1 },
       sleep:           { preset: 'maintain',  rank: 1 },
       energy:          { preset: 'maintain',  rank: 1 },
-      routine:         { preset: 'maintain',  rank: 1 },
-      classes:         { preset: 'maintain',  rank: 1, cardio: true }
+      routine:         { preset: 'maintain',  rank: 1 }
     };
 
     /* Από τη λίστα στόχων του πελάτη βγάζει μία πρόταση ρυθμίσεων.
@@ -5461,11 +5362,7 @@ function __bootWorkout() {
     const PREFIX = 'lean.';
 
     const SUPABASE_URL = 'https://sdddhzrbqkfayodyjnnz.supabase.co';
-    /* Το ίδιο κλειδί με τις κρατήσεις. Δύο διαφορετικά κλειδιά σήμαινε
-       ότι μια ανακύκλωση του ενός θα έσπαγε σιωπηλά μόνο τον
-       συγχρονισμό του καρνέ, χωρίς κανένα σημάδι αλλού. */
-    const SUPABASE_ANON_KEY =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkZGRoenJicWtmYXlvZHlqbm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjUwMzMsImV4cCI6MjEwNDQ0MTAzM30.Y0cQV6tJFltnl2hYKJXzhxzVb0XYOB9DK5xGCkUbEQg';
+    const SUPABASE_KEY = 'sb_publishable_Pz_tirRe8zJ2JZV6VC4K1g_TNyp_nDe';
 
     const TABLES = {
       sessions: 'lean_sessions',
@@ -5610,7 +5507,11 @@ function __bootWorkout() {
       const uid = currentUser();
       if (!uid) { emit('ok'); return; }
       try {
-        await rpc('lean_clear', { p_client_id: uid });
+        const sb = await getClient();
+        for (const table of Object.values(TABLES)) {
+          await sb.from(table).delete().eq('user_id', uid);
+        }
+        await sb.from(PROFILE_TABLE).delete().eq('user_id', uid);
         emit('ok');
       } catch (err) {
         emit('error', message(err));
@@ -5662,26 +5563,18 @@ function __bootWorkout() {
 
     /* ---------- Πελάτης Supabase ---------- */
 
-    /* Ο συγχρονισμός περνάει από δύο συναρτήσεις της βάσης, όχι από τους
-       πίνακες κατευθείαν. Ο διακομιστής κρατάει ο ίδιος το user_id, οπότε
-       ό,τι κι αν στείλει ο browser, ξένη γραμμή δεν ακουμπάει. Έτσι δεν
-       χρειάζεται ούτε βιβλιοθήκη από CDN. */
-    async function rpc(fn, body) {
-      const res = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: 'Bearer ' + SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) throw new Error('Ο διακομιστής απάντησε ' + res.status);
-      const out = await res.json();
-      if (!out || out.ok !== true) {
-        throw new Error((out && out.error) || 'Αποτυχία συγχρονισμού');
+    let clientPromise = null;
+
+    function getClient() {
+      if (!clientPromise) {
+        clientPromise = import('https://esm.sh/@supabase/supabase-js@2')
+          .then(({ createClient }) => createClient(SUPABASE_URL, SUPABASE_KEY))
+          .catch((err) => {
+            clientPromise = null;
+            throw err;
+          });
       }
-      return out;
+      return clientPromise;
     }
 
     /* ---------- Ανέβασμα ---------- */
@@ -5690,21 +5583,27 @@ function __bootWorkout() {
       return (read(key, []) || []).filter((r) => r && UUID_RE.test(String(r.id)));
     }
 
-    /* Όλα μαζί σε μία κλήση: λιγότερα ταξίδια και, το κυριότερο, μία
-       μόνο πόρτα προς τη βάση αντί για τέσσερις ανοιχτούς πίνακες. */
-    function payloadFor() {
-      return {
-        sessions: rowsFor('sessions'),
-        bodyweight: rowsFor('bodyweight'),
-        measurements: rowsFor('measurements'),
-        profile: read('profile', null),
-        plan: read('plan', null)
-      };
-    }
-
-    async function pushAll(uid) {
+    async function pushKey(sb, key, uid) {
       if (!uid) return;
-      await rpc('lean_push', { p_client_id: uid, p_payload: payloadFor() });
+      if (SINGLE[key]) {
+        const p = read(key, null);
+        if (!p) return;
+        const { updated_at, ...data } = p;
+        const { error } = await sb
+          .from(PROFILE_TABLE)
+          .upsert({
+            id: singleId(key, uid),
+            user_id: uid,
+            data,
+            updated_at: updated_at || new Date().toISOString(),
+          }, { onConflict: 'id' });
+        if (error) throw new Error(error.message);
+        return;
+      }
+      const rows = rowsFor(key).map((r) => ({ ...r, user_id: uid }));
+      if (!rows.length) return;
+      const { error } = await sb.from(TABLES[key]).upsert(rows, { onConflict: 'id' });
+      if (error) throw new Error(error.message);
     }
 
     function queuePush(key) {
@@ -5720,11 +5619,13 @@ function __bootWorkout() {
          συσκευή και περιμένει. Η ουρά δεν αδειάζει. */
       const uid = currentUser();
       if (!uid) { emit('idle'); return; }
+      const keys = [...pending];
       sync.running = true;
       emit('syncing');
       try {
-        await pushAll(uid);
-        pending.clear();
+        const sb = await getClient();
+        for (const key of keys) await pushKey(sb, key, uid);
+        keys.forEach((k) => pending.delete(k));
         emit('ok');
       } catch (err) {
         emit('error', message(err));
@@ -5762,22 +5663,26 @@ function __bootWorkout() {
       return { rows: [...map.values()], changed };
     }
 
-    async function pullAll(uid) {
+    async function pullAll(sb, uid) {
       if (!uid) return false;
       let changed = false;
 
-      const out = await rpc('lean_pull', { p_client_id: uid });
-
-      for (const key of Object.keys(TABLES)) {
-        const result = merge(key, read(key, []), out[key] || []);
+      for (const [key, table] of Object.entries(TABLES)) {
+        const { data, error } = await sb.from(table).select('*').eq('user_id', uid);
+        if (error) throw new Error(error.message);
+        const result = merge(key, read(key, []), data);
         if (result.changed) {
           writeRaw(key, result.rows);
           changed = true;
         }
       }
 
+      const { data, error } = await sb.from(PROFILE_TABLE).select('*').eq('user_id', uid);
+      if (error) throw new Error(error.message);
+      const byId = new Map((data || []).filter(Boolean).map((r) => [r.id, r]));
+
       for (const key of Object.keys(SINGLE)) {
-        const row = out[key];
+        const row = byId.get(singleId(key, uid));
         if (!row || !row.data) continue;
         const remote = { ...row.data, updated_at: row.updated_at };
         const mine = read(key, null);
@@ -5799,8 +5704,9 @@ function __bootWorkout() {
       emit('syncing');
       let changed = false;
       try {
-        changed = await pullAll(uid);
-        await pushAll(uid);
+        const sb = await getClient();
+        changed = await pullAll(sb, uid);
+        for (const key of SYNCED) await pushKey(sb, key, uid);
         pending.clear();
         emit('ok');
         if (changed) window.dispatchEvent(new CustomEvent('lean:data'));
@@ -6034,14 +5940,14 @@ function __bootWorkout() {
     'use strict';
 
     const {
-      buildProgram, defaultConfig, configFromGoals,
+      buildProgram, defaultConfig,
       PRESETS, EMPHASIS_LIST, ALIASES,
       WEEKLY_VOLUME, NUTRITION, ALTERNATIVES, GROUPS,
       SESSION_TYPES, LIFT_ORDER, MOVE_ORDER, MIX_ORDER, MAX_LIFT_DAYS,
       normalizeMix, mixTotal, liftTotal, mixSummary
     } = __data;
     const { lineChart, barRow } = __charts;
-    const { fetchBrand, fetchGoals, CLIENT_URL } = __link;
+    const { fetchBrand, CLIENT_URL } = __link;
 
     /* Το πρόγραμμα φτιάχνεται στην εκκίνηση από τις ρυθμίσεις και
        ξαναφτιάχνεται όποτε αλλάξουν. Μέχρι τότε είναι άδειο. */
@@ -6402,7 +6308,9 @@ function __bootWorkout() {
           `<div class="ex-prescription">${ex.sets} × ${ex.repMin}–${ex.repMax}` +
           (ex.rir && ex.rir !== '—' ? ` · RIR ${esc(ex.rir)}` : '') + `</div></div>` +
           `<div class="ex-tools"><span class="ex-group">${esc(ex.group)}</span>` +
-          `<button type="button" class="ex-swap" aria-label="Άλλαξε την άσκηση ${esc(ex.name)}">⇄ Αλλαγή</button></div>`;
+          `<button type="button" class="ex-swap" aria-expanded="${state.swapping === ex.id}"` +
+          ` aria-label="Άλλαξε την άσκηση ${esc(ex.name)}">` +
+          `<span class="ico" aria-hidden="true">⇄</span>Αλλαγή</button></div>`;
         card.appendChild(head);
 
         $('.ex-swap', head).addEventListener('click', () => {
@@ -8015,57 +7923,13 @@ function __bootWorkout() {
     renderAll();
     renderSettings();
 
-    /* ---------- Οι στόχοι από τις κρατήσεις ----------
-       Ο πελάτης τους δηλώνει μία φορά στις Ρυθμίσεις των κρατήσεων και
-       το πρόγραμμα στήνεται μόνο του. Αν έχει ήδη πειράξει ο ίδιος τις
-       ρυθμίσεις του καρνέ, δεν τον διορθώνουμε από πάνω του — κερδίζει
-       πάντα ό,τι διάλεξε με το χέρι. */
-    async function applyGoals() {
-      let info = null;
-      try { info = await fetchGoals(); } catch (e) { return; }
-      if (!info || !Array.isArray(info.goals) || !info.goals.length) return;
-
-      const src = state.plan.config.source;
-      if (src && src !== 'default' && src !== 'goals') return;
-
-      const sug = configFromGoals(info.goals);
-      if (!sug.matched.length) return;
-
-      const before = configKey(state.plan.config);
-      state.plan.config = {
-        ...state.plan.config,
-        preset: sug.preset,
-        emphasis: [...sug.emphasis],
-        source: 'goals'
-      };
-      savePlan();
-      if (configKey(state.plan.config) === before) return;
-
-      rebuild();
-      state.day = suggestedDay();
-      renderAll();
-      renderSettings();
-
-      const p = PRESETS[state.plan.config.preset];
-      const sel = $('#n-goal');
-      if (p && sel) {
-        sel.value = p.nutrition;
-        renderNutrition();
-      }
-    }
-
-    /* Ο πελάτης άλλαξε στόχους στις Ρυθμίσεις των κρατήσεων, με το καρνέ
-       ήδη ανοιχτό. */
-    window.addEventListener('lean:goals', () => { applyGoals(); });
-
     /* Το όνομα και το λογότυπο του διαχειριστή. Μπαίνει αμέσως το
        εφεδρικό, ώστε να μη μείνει κενή η κεφαλίδα όσο φορτώνει. */
     paintBrand();
     loadBrand();
 
-    /* Πρώτος γύρος συγχρονισμού μόλις σταθεί η οθόνη. Οι στόχοι
-       ακολουθούν, ώστε να πατήσουν πάνω σε ό,τι κατέβηκε. */
-    store.syncNow().then(() => applyGoals()).catch(() => applyGoals());
+    /* Πρώτος γύρος συγχρονισμού μόλις σταθεί η οθόνη. */
+    store.syncNow();
   })();
 
 }
@@ -8112,10 +7976,6 @@ function __bootWorkout() {
     document.documentElement.style.colorScheme = "dark";
     if (themeMeta) themeMeta.setAttribute("content", "#0a0a0a");
     clientTitle = document.title;
-    /* Μια εγγραφή στο ιστορικό, ώστε το «πίσω» του κινητού να έχει πού
-       να γυρίσει. Χωρίς αυτήν το popstate πιο κάτω δεν πυροδοτούνταν
-       ποτέ και το «πίσω» έβγαζε τον πελάτη έξω από την εφαρμογή. */
-    try { history.pushState({ workout: 1 }, "", location.href); } catch (e) { /* αγνόησε */ }
     window.scrollTo(0, 0);
     load();
   }
@@ -8129,11 +7989,6 @@ function __bootWorkout() {
     if (typeof window.__applyClientTheme === "function") window.__applyClientTheme();
     /* Το καρνέ αλλάζει τον τίτλο της σελίδας· τον γυρνάμε πίσω. */
     document.title = clientTitle;
-    /* Αν φύγαμε με τον κεραυνό και όχι με το «πίσω», βγάζουμε μόνοι μας
-       την εγγραφή — αλλιώς μαζεύονται διπλές στο ιστορικό. */
-    try {
-      if (history.state && history.state.workout) history.back();
-    } catch (e) { /* αγνόησε */ }
     window.scrollTo(0, 0);
   }
 
