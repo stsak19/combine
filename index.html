@@ -2370,12 +2370,20 @@ function ChatIcon() {
 
 /* Ο κεραυνός προς την προπόνηση. Κίτρινο πάνω σε μαύρο — το ίδιο
    σήμα που έχει και η εφαρμογή προπόνησης, ώστε να φαίνεται αμέσως
-   πού πάει. */
+   πού πάει.
+
+   Στο σκούρο θέμα το κουμπί γυρίζει σε ανοιχτό γκρι (.bg-black →
+   #F2F2F2), οπότε σκέτο το κίτρινο χανόταν πάνω του. Ζωγραφίζουμε
+   το σχήμα δύο φορές: πρώτα ένα φαρδύ σκούρο περίγραμμα από κάτω,
+   μετά το κίτρινο από πάνω. Έτσι το κίτρινο δεν λεπταίνει και ο
+   κεραυνός διαβάζεται και στα δύο θέματα. */
 function BoltIcon() {
+  const d = "M13 2 4 13.5h6.2L9 22l9-11.5h-6.2L13 2z";
   return (
-    <svg viewBox="0 0 24 24" width="21" height="21" fill="#E8FF47"
-      stroke="#E8FF47" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 2 4 13.5h6.2L9 22l9-11.5h-6.2L13 2z" />
+    <svg viewBox="0 0 24 24" width="21" height="21"
+      strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} fill="none" stroke="#0C0C0C" strokeWidth="3.6" />
+      <path d={d} fill="#E8FF47" stroke="#E8FF47" strokeWidth="1.6" />
     </svg>
   );
 }
