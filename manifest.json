@@ -26,19 +26,6 @@
           "type": "image/png"
         }
       ]
-    },
-    {
-      "name": "Προπόνηση",
-      "short_name": "Προπόνηση",
-      "description": "Άνοιγμα κατευθείαν στο καρνέ προπόνησης",
-      "url": "./index.html?workout=1",
-      "icons": [
-        {
-          "src": "./icon-192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
     }
   ],
   "icons": [

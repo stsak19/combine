@@ -438,8 +438,26 @@ const GOAL_LABELS = {
   energy: "Ενέργεια για την καθημερινότητα",
   routine: "Σταθερή ρουτίνα άσκησης",
   classes: "Ομαδικά μαθήματα και παρέα",
+  glutes: "Γλουτοί",
+  arms: "Χέρια",
+  vtaper: "Ώμοι και πλάτη",
 };
 const goalLabel = (k) => GOAL_LABELS[k] || k;
+
+/* Ο κύριος στόχος. Ένας ανά πελάτη, και από αυτόν βγαίνει το πρόγραμμα
+   στο καρνέ προπόνησης. Ίδια κλειδιά με τη goal_primary_keys(). */
+const PRIMARY_LABELS = {
+  recomp: "Recomposition",
+  cut: "Γράμμωση",
+  bulk: "Lean bulk",
+  strength: "Δύναμη",
+  endurance: "Αντοχή",
+  maintain: "Διατήρηση",
+  beginner: "Πρώτη φορά στο γυμναστήριο",
+  rehab: "Επιστροφή μετά από τραυματισμό",
+  event: "Προετοιμασία για αγώνα ή τεστ",
+};
+const primaryLabel = (k) => PRIMARY_LABELS[k] || k;
 
 /* ---------- Νέες κρατήσεις ----------
    Κάθε λεπτό ρωτάμε τον διακομιστή τι μπήκε από την τελευταία φορά.
@@ -1030,7 +1048,6 @@ const TABS = [
   ["hours", "Χωρητικότητα"],
   ["people", "Πελάτες"],
   ["goals", "Στόχοι πελατών"],
-  ["stats", "Στατιστικά"],
   ["access", "Είσοδος, QR & NFC"],
   ["newsletter", "Ενημερώσεις"],
   ["announce", "Ειδοποιήσεις"],
@@ -1203,7 +1220,6 @@ function App() {
           chatOn={chatOn} chatSaving={chatSaving} onToggleChat={toggleChat} />
       )}
       {tab === "goals" && <Goals {...props} />}
-      {tab === "stats" && <Stats {...props} />}
       {tab === "access" && (
         <React.Fragment>
           <Station {...props} />
@@ -3336,61 +3352,6 @@ function People({ flash, onAuthFail }) {
   );
 }
 
-/* ---------- Stats ---------- */
-function Stats({ flash, onAuthFail }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      const { data: d, error } = await rpc("admin_stats", {});
-      setLoading(false);
-      if (error === "AUTH") { onAuthFail(); return; }
-      if (error) { flash("Δεν φόρτωσαν τα στατιστικά"); return; }
-      setData(d);
-    })();
-  }, [flash, onAuthFail]);
-
-  if (loading) return <div className="f-text px-5 py-10 text-[14px] text-neutral-400 sm:px-6">Φόρτωση…</div>;
-
-  const t = data?.totals || {};
-  const perDay = (data?.per_day || []).map((d) => ({ label: DAYS[parseISO(d.date).getDay()], value: d.count }));
-  const perHour = (data?.per_hour || []).map((h) => ({ label: h.time, value: h.count }));
-  const top = perHour.slice().sort((a, b) => b.value - a.value).slice(0, 3);
-
-  return (
-    <div className="px-5 sm:px-6">
-      <h2 className="f-display pt-6 text-[24px] font-extrabold uppercase tracking-tight">Στατιστικά</h2>
-      <p className="f-text mt-1 text-[13px] text-neutral-500">Τελευταίες 7 ημέρες</p>
-
-      <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-        <Kpi label="Κρατήσεις" value={t.bookings ?? 0} />
-        <Kpi label="Check-ins" value={t.checkins ?? 0}
-          note={t.bookings ? `${Math.round((t.checkins / t.bookings) * 100)}%` : ""} />
-        <Kpi label="Δεν ήρθαν" value={t.noshows ?? 0} />
-        <Kpi label="Ακυρώσεις" value={t.cancels ?? 0} />
-      </div>
-
-      <h3 className="f-display mt-10 text-[14px] font-bold uppercase tracking-wide text-neutral-500">Κρατήσεις ανά ημέρα</h3>
-      <div className="mt-4"><Bars items={perDay} /></div>
-
-      <h3 className="f-display mt-10 text-[14px] font-bold uppercase tracking-wide text-neutral-500">Κρατήσεις ανά ώρα</h3>
-      <div className="mt-4"><Bars items={perHour} /></div>
-
-      <h3 className="f-display mt-10 text-[14px] font-bold uppercase tracking-wide text-neutral-500">Ώρες με τη μεγαλύτερη ζήτηση</h3>
-      <div className="mt-3 divide-y divide-neutral-300 border-y-2 border-black">
-        {top.map((x) => (
-          <div key={x.label} className="flex items-center justify-between py-3 text-[15px]">
-            <span className="f-mono">{x.label}</span>
-            <span className="f-mono text-neutral-500">{x.value} κρατήσεις</span>
-          </div>
-        ))}
-      </div>
-      <div className="h-10" />
-    </div>
-  );
-}
-
 /* ---------- QR (self-contained encoder) ---------- */
 const EXP = new Array(512), LOG = new Array(256);
 (() => { let x = 1; for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; } for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255]; })();
@@ -3524,21 +3485,6 @@ function Access({ flash, onAuthFail }) {
     catch (e) { flash("Η αντιγραφή δεν είναι διαθέσιμη"); }
   };
 
-  /* Γράφει τον σύνδεσμο check-in κατευθείαν στο tag, με Web NFC. */
-  const [writing, setWriting] = useState(false);
-  const writeTag = async (text) => {
-    if (!text || !NFC_OK) return;
-    setWriting(true);
-    try {
-      const w = new NDEFReader();
-      await w.write({ records: [{ recordType: "url", data: text }] });
-      flash("Το tag γράφτηκε");
-    } catch (e) {
-      flash("Δεν γράφτηκε: " + (e.message || e));
-    }
-    setWriting(false);
-  };
-
   if (loading) return <div className="f-text px-5 py-10 text-[14px] text-neutral-400 sm:px-6">Φόρτωση…</div>;
   const checkinUrl = url ? url + (url.includes("?") ? "&" : "?") + "checkin=1" : "";
 
@@ -3589,28 +3535,6 @@ function Access({ flash, onAuthFail }) {
         </p>
       )}
 
-      <div className="mt-9 max-w-xl border-t-2 border-black pt-6">
-        <h3 className="f-display text-[14px] font-bold uppercase tracking-wide">NFC tag για check-in</h3>
-
-        {checkinUrl ? (
-          <div className="mt-3 border-2 border-black p-4">
-            <div className="f-display text-[11px] font-bold uppercase tracking-wide text-neutral-500">Σύνδεσμος check-in</div>
-            <div className="f-mono mt-1 select-all break-all text-[14px]">{checkinUrl}</div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => copy(checkinUrl)}>Αντιγραφή συνδέσμου</Button>
-              {NFC_OK && (
-                <Button variant="outline" size="sm" disabled={writing} onClick={() => writeTag(checkinUrl)}>
-                  {writing ? "Ακούμπησε το tag…" : "Γράψιμο στο tag"}
-                </Button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <p className="f-text mt-3 text-[13px] text-neutral-500">
-            Συμπλήρωσε πρώτα τη διεύθυνση της εφαρμογής πιο πάνω και πάτα Αποθήκευση.
-          </p>
-        )}
-      </div>
       <div className="h-10" />
     </div>
   );
@@ -4142,9 +4066,20 @@ function Goals({ flash, onAuthFail }) {
   useEffect(() => { load(); }, [load]);
 
   const counts = (data && data.counts) || [];
+  const primaryCounts = (data && data.primary_counts) || [];
   const all = (data && data.clients) || [];
-  const rows = filter ? all.filter((c) => (c.goals || []).includes(filter)) : all;
+  const rows = !filter
+    ? all
+    : filter.kind === "primary"
+      ? all.filter((c) => c.primary === filter.key)
+      : all.filter((c) => (c.goals || []).includes(filter.key));
+  const filterName = filter
+    ? (filter.kind === "primary" ? primaryLabel(filter.key) : goalLabel(filter.key))
+    : "";
+  const sameFilter = (kind, key) => !!filter && filter.kind === kind && filter.key === key;
+  const pick = (kind, key) => setFilter(sameFilter(kind, key) ? null : { kind, key });
   const max = counts.reduce((m, c) => Math.max(m, c.count), 0) || 1;
+  const maxPrimary = primaryCounts.reduce((m, c) => Math.max(m, c.count), 0) || 1;
   const withOther = all.filter((c) => (c.custom && c.custom.length) || c.other).length;
 
   const fmtWhen = (s) => {
@@ -4157,8 +4092,9 @@ function Goals({ flash, onAuthFail }) {
     <div className="px-5 sm:px-6">
       <h2 className="f-display pt-6 text-[24px] font-extrabold uppercase tracking-tight">Στόχοι πελατών</h2>
       <p className="f-text mt-1 max-w-[56ch] text-[13px] leading-relaxed text-neutral-500">
-        Ό,τι δήλωσε ο κάθε πελάτης στις ρυθμίσεις της εφαρμογής του. Μπορεί να
-        διαλέξει όσους στόχους θέλει, ή να γράψει δικό του.
+        Ό,τι δήλωσε ο κάθε πελάτης στις ρυθμίσεις της εφαρμογής του: έναν κύριο
+        στόχο, από τον οποίο βγαίνει το πρόγραμμά του, κι όσους άλλους θέλει.
+        Πάτα έναν στόχο για να δεις μόνο όσους τον έχουν.
       </p>
 
       {data === null ? (
@@ -4174,22 +4110,50 @@ function Goals({ flash, onAuthFail }) {
             <Kpi label="Έγραψαν δικό τους" value={withOther} />
           </div>
 
-          <h3 className="f-display mt-9 text-[13px] font-bold uppercase tracking-wide text-neutral-500">
-            Πόσοι διάλεξαν τι
-          </h3>
-          <div className="mt-3 divide-y divide-neutral-200 border-y-2 border-black">
-            {counts.map((c) => (
-              <button key={c.key} onClick={() => setFilter(filter === c.key ? null : c.key)}
-                className={`flex w-full items-center gap-3 py-2.5 text-left ${
-                  filter === c.key ? "bg-neutral-100" : ""}`}>
-                <span className="f-text w-[40%] shrink-0 truncate text-[14px]">{goalLabel(c.key)}</span>
-                <span className="block h-[12px] flex-1 border border-black">
-                  <span className="block h-full bg-black" style={{ width: `${(c.count / max) * 100}%` }} />
-                </span>
-                <span className="f-mono w-8 shrink-0 text-right text-[13px]">{c.count}</span>
-              </button>
-            ))}
-          </div>
+          {primaryCounts.length > 0 && (
+            <>
+              <h3 className="f-display mt-9 text-[13px] font-bold uppercase tracking-wide text-neutral-500">
+                Κύριος στόχος
+              </h3>
+              <p className="f-text mt-1 max-w-[56ch] text-[13px] leading-relaxed text-neutral-500">
+                Αυτός ορίζει το πρόγραμμα που βλέπει ο πελάτης στο καρνέ προπόνησης.
+              </p>
+              <div className="mt-3 divide-y divide-neutral-200 border-y-2 border-black">
+                {primaryCounts.map((c) => (
+                  <button key={c.key} onClick={() => pick("primary", c.key)}
+                    className={`flex w-full items-center gap-3 py-2.5 text-left ${
+                      sameFilter("primary", c.key) ? "bg-neutral-100" : ""}`}>
+                    <span className="f-text w-[40%] shrink-0 truncate text-[14px]">{primaryLabel(c.key)}</span>
+                    <span className="block h-[12px] flex-1 border border-black">
+                      <span className="block h-full bg-black" style={{ width: `${(c.count / maxPrimary) * 100}%` }} />
+                    </span>
+                    <span className="f-mono w-8 shrink-0 text-right text-[13px]">{c.count}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {counts.length > 0 && (
+            <>
+              <h3 className="f-display mt-9 text-[13px] font-bold uppercase tracking-wide text-neutral-500">
+                Τι άλλο διάλεξαν
+              </h3>
+              <div className="mt-3 divide-y divide-neutral-200 border-y-2 border-black">
+                {counts.map((c) => (
+                  <button key={c.key} onClick={() => pick("goal", c.key)}
+                    className={`flex w-full items-center gap-3 py-2.5 text-left ${
+                      sameFilter("goal", c.key) ? "bg-neutral-100" : ""}`}>
+                    <span className="f-text w-[40%] shrink-0 truncate text-[14px]">{goalLabel(c.key)}</span>
+                    <span className="block h-[12px] flex-1 border border-black">
+                      <span className="block h-full bg-black" style={{ width: `${(c.count / max) * 100}%` }} />
+                    </span>
+                    <span className="f-mono w-8 shrink-0 text-right text-[13px]">{c.count}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           {(data.custom_counts || []).length > 0 && (
             <>
@@ -4212,7 +4176,7 @@ function Goals({ flash, onAuthFail }) {
 
           <div className="mt-9 flex items-baseline justify-between gap-3">
             <h3 className="f-display text-[13px] font-bold uppercase tracking-wide text-neutral-500">
-              Ανά πελάτη {filter && `· ${goalLabel(filter)}`}
+              Ανά πελάτη {filter && `· ${filterName}`}
             </h3>
             {filter && (
               <Button variant="ghost" size="sm" onClick={() => setFilter(null)}>Καθαρισμός φίλτρου</Button>
@@ -4229,13 +4193,18 @@ function Goals({ flash, onAuthFail }) {
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
+                  {c.primary && (
+                    <span className="f-display border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                      {primaryLabel(c.primary)}
+                    </span>
+                  )}
                   {(c.goals || []).map((g) => (
                     <span key={g} className="f-display border border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
                       {goalLabel(g)}
                     </span>
                   ))}
                   {(c.custom && c.custom.length ? c.custom : c.other ? [c.other] : []).map((v, i) => (
-                    <span key={"c" + i} className="f-display border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                    <span key={"c" + i} className="f-display border border-dashed border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
                       {v}
                     </span>
                   ))}

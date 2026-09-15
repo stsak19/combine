@@ -1624,14 +1624,44 @@ const GOAL_LABELS = {
   energy: "Ενέργεια για την καθημερινότητα",
   routine: "Σταθερή ρουτίνα άσκησης",
   classes: "Ομαδικά μαθήματα και παρέα",
+  glutes: "Γλουτοί",
+  arms: "Χέρια",
+  vtaper: "Ώμοι και πλάτη",
 };
 
-const GOAL_GROUPS = [
-  { title: "Το σώμα μου", keys: ["weight_loss", "muscle_gain", "toning", "maintain"] },
-  { title: "Απόδοση", keys: ["strength", "endurance", "flexibility", "core", "event_prep"] },
-  { title: "Πόνοι και στάση", keys: ["posture", "pain_relief", "injury_recovery"] },
-  { title: "Καθημερινότητα", keys: ["stress", "sleep", "energy", "routine", "classes"] },
+/* Ο κύριος στόχος. Ένας μόνο, και από αυτόν βγαίνει το πρόγραμμα στο
+   καρνέ προπόνησης. Τα κλειδιά είναι ίδια με τα PRESETS πιο κάτω και με
+   τη goal_primary_keys() στη βάση. */
+const PRIMARY_GOALS = [
+  { key: "recomp", label: "Recomposition",
+    desc: "Χάνεις λίπος και χτίζεις μυ ταυτόχρονα. Η ζυγαριά μένει σχεδόν σταθερή, αλλάζει όμως το σχήμα του σώματος." },
+  { key: "cut", label: "Γράμμωση",
+    desc: "Στόχος το λίπος. Κρατάμε βαριά κιλά στην προπόνηση, ώστε να μη χαθεί ο μυς που ήδη έχεις." },
+  { key: "bulk", label: "Lean bulk",
+    desc: "Χτίσιμο μυϊκής μάζας με ελεγχόμενο πλεόνασμα και περισσότερο όγκο προπόνησης. Καθαρά κιλά, χωρίς υπερβολές." },
+  { key: "strength", label: "Δύναμη",
+    desc: "Λίγες επαναλήψεις, βαριά κιλά, μεγάλα διαλείμματα. Κυνηγάς νούμερα στις βασικές κινήσεις." },
+  { key: "endurance", label: "Αντοχή",
+    desc: "Περισσότερες επαναλήψεις, μικρότερα διαλείμματα. Κουράζεσαι λιγότερο μέσα στην εβδομάδα σου." },
+  { key: "maintain", label: "Διατήρηση",
+    desc: "Σταθερή ρουτίνα χωρίς πίεση. Κρατάς ό,τι έχεις χτίσει με τον λιγότερο δυνατό κόπο." },
+  { key: "beginner", label: "Πρώτη φορά στο γυμναστήριο",
+    desc: "Λίγες ασκήσεις, καθαρή τεχνική, ήπια φορτία. Πρώτα η συνήθεια και η σωστή εκτέλεση, μετά τα κιλά." },
+  { key: "rehab", label: "Επιστροφή μετά από τραυματισμό",
+    desc: "Ελεγχόμενα φορτία και μεγάλα εύρη κίνησης, τίποτα κοντά στην αποτυχία. Πρώτα ο γιατρός ή ο φυσικοθεραπευτής, μετά η εφαρμογή." },
+  { key: "event", label: "Προετοιμασία για αγώνα ή τεστ",
+    desc: "Δουλεύεις για συγκεκριμένη ημερομηνία: δύναμη και απόδοση στην κίνηση που σε ενδιαφέρει." },
 ];
+const PRIMARY_LABELS = PRIMARY_GOALS.reduce((o, g) => { o[g.key] = g.label; return o; }, {});
+
+const GOAL_GROUPS = [
+  { title: "Πού θέλεις έμφαση", keys: ["core", "vtaper", "glutes", "arms", "posture"] },
+  { title: "Κίνηση και ευεξία", keys: ["flexibility", "pain_relief", "stress", "sleep", "energy", "routine", "classes"] },
+];
+
+/* Ό,τι μπορεί να διαλέξει σήμερα ο πελάτης ως δευτερεύοντα στόχο.
+   Παλιές επιλογές που έγιναν κύριος στόχος δεν εμφανίζονται πια. */
+const SECONDARY_KEYS = new Set(GOAL_GROUPS.reduce((all, g) => all.concat(g.keys), []));
 
 const MAX_CUSTOM_GOALS = 6;
 const MAX_CUSTOM_GOAL_LEN = 60;
@@ -2695,7 +2725,7 @@ function QrScanner({ onClose, onFound }) {
 
 /* Όλες οι ρυθμίσεις της συσκευής και του λογαριασμού, από το
    γρανάζι πάνω δεξιά. */
-function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDeleted }) {
+function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDeleted, onGoalsChange }) {
   return (
     <div className="h-full overflow-y-auto px-5">
       <h2 className="f-display pt-6 text-[24px] font-extrabold uppercase tracking-tight">Ρυθμίσεις</h2>
@@ -2717,7 +2747,7 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
         </p>
       </div>
 
-      <GoalsPanel session={session} flash={flash} />
+      <GoalsPanel session={session} flash={flash} onGoalsChange={onGoalsChange} />
 
       <PushPanel session={session} flash={flash} />
 
@@ -2747,7 +2777,8 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
    Διαλέγει όσους θέλει από τη λίστα και γράφει και δικούς του, για
    ό,τι δεν έχουμε προβλέψει. Τα κρατάει η βάση, οπότε τα βλέπει και
    η διαχείριση και το καρνέ προπόνησης — μία πηγή, τρεις οθόνες. */
-function GoalsPanel({ session, flash }) {
+function GoalsPanel({ session, flash, onGoalsChange }) {
+  const [primary, setPrimary] = useState("");
   const [picked, setPicked] = useState([]);
   const [custom, setCustom] = useState([]);
   const [text, setText] = useState("");
@@ -2762,18 +2793,26 @@ function GoalsPanel({ session, flash }) {
       const { data, error } = await sb.rpc("my_goals", { p_client_id: session.clientId });
       if (!alive) return;
       if (!error && data) {
-        const g = Array.isArray(data.goals) ? data.goals : [];
+        const p = typeof data.primary === "string" ? data.primary : "";
+        const g = (Array.isArray(data.goals) ? data.goals : []).filter((k) => SECONDARY_KEYS.has(k));
         const c = Array.isArray(data.custom) ? data.custom : [];
+        setPrimary(p);
         setPicked(g);
         setCustom(c);
         /* Αν δεν έχει δηλώσει τίποτα, ανοιχτό — για να το δει. Αν έχει,
            κλειστό: μια γραμμή με τη σύνοψη αρκεί. */
-        setOpen(g.length === 0 && c.length === 0);
+        setOpen(!p && g.length === 0 && c.length === 0);
+        if (onGoalsChange) onGoalsChange(!!p || g.length > 0 || c.length > 0);
       }
       setLoaded(true);
     })();
     return () => { alive = false; };
   }, [session.clientId]);
+
+  const choosePrimary = (k) => {
+    setPrimary((p) => (p === k ? "" : k));
+    setDirty(true);
+  };
 
   const toggle = (k) => {
     setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
@@ -2805,27 +2844,33 @@ function GoalsPanel({ session, flash }) {
       p_client_id: session.clientId,
       p_goals: picked,
       p_custom: custom,
+      p_primary: primary || null,
     });
     setSaving(false);
     if (error || !data || data.ok !== true) {
       flash((data && data.error) || "Δεν αποθηκεύτηκε");
       return;
     }
-    setPicked(Array.isArray(data.goals) ? data.goals : picked);
-    setCustom(Array.isArray(data.custom) ? data.custom : custom);
+    const p = typeof data.primary === "string" ? data.primary : primary;
+    const g = Array.isArray(data.goals) ? data.goals : picked;
+    const c = Array.isArray(data.custom) ? data.custom : custom;
+    setPrimary(p);
+    setPicked(g);
+    setCustom(c);
     setDirty(false);
+    if (onGoalsChange) onGoalsChange(!!p || g.length > 0 || c.length > 0);
     flash("Οι στόχοι σου αποθηκεύτηκαν");
   };
 
-  const count = picked.length + custom.length;
+  const count = (primary ? 1 : 0) + picked.length + custom.length;
 
   return (
     <div className="mt-10 border border-black p-4">
       <div className="f-display text-[14px] font-bold uppercase tracking-wide">Οι στόχοι μου</div>
       <p className="f-text mt-2 text-[13px] leading-relaxed text-neutral-600">
-        Διάλεξε όσους θέλεις — και γράψε και δικούς σου, αν δεν τους
-        βρίσκεις στη λίστα. Τους βλέπει ο γυμναστής σου, και το καρνέ
-        προπόνησης ρυθμίζει το πρόγραμμά σου από αυτούς.
+        Διάλεξε πρώτα τον κύριο στόχο σου και μετά ό,τι άλλο θέλεις να
+        δουλέψεις. Τους βλέπει ο γυμναστής σου, και το καρνέ προπόνησης
+        φτιάχνει το πρόγραμμά σου από αυτούς.
       </p>
 
       {!loaded ? (
@@ -2839,13 +2884,18 @@ function GoalsPanel({ session, flash }) {
                   <span className="f-text text-[13px] text-neutral-400">Δεν έχεις δηλώσει στόχους.</span>
                 ) : (
                   <>
+                    {primary && (
+                      <span className="f-display border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                        {PRIMARY_LABELS[primary] || primary}
+                      </span>
+                    )}
                     {picked.map((k) => (
                       <span key={k} className="f-display border border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
                         {GOAL_LABELS[k] || k}
                       </span>
                     ))}
                     {custom.map((v) => (
-                      <span key={v} className="f-display border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                      <span key={v} className="f-display border border-dashed border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
                         {v}
                       </span>
                     ))}
@@ -2860,63 +2910,112 @@ function GoalsPanel({ session, flash }) {
             </>
           ) : (
             <>
-              {GOAL_GROUPS.map((g) => (
-                <div key={g.title} className="mt-5">
-                  <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-                    {g.title}
-                  </div>
-                  <div className="mt-2 flex flex-col">
-                    {g.keys.map((k) => {
-                      const on = picked.includes(k);
-                      return (
-                        <button key={k} onClick={() => toggle(k)}
-                          className="flex items-start gap-3 py-2 text-left">
-                          <span className={`mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center border border-black ${
-                            on ? "bg-black" : "bg-white"}`}>
-                            {on && <span className="f-display text-[13px] font-bold leading-none text-white">✓</span>}
-                          </span>
-                          <span className="f-text text-[14px] leading-snug">{GOAL_LABELS[k]}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              <div className="mt-6 border-t border-neutral-200 pt-5">
+              <div className="mt-5">
                 <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-                  Ο δικός σου στόχος
+                  1 · Ο κύριος στόχος μου
                 </div>
                 <p className="f-text mt-1 text-[12px] leading-relaxed text-neutral-500">
-                  Γράψε ό,τι θέλεις με δικά σου λόγια. Μέχρι {MAX_CUSTOM_GOALS}.
+                  Διάλεξε έναν. Από αυτόν βγαίνει το πρόγραμμα στο καρνέ προπόνησης.
                 </p>
-
-                {custom.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {custom.map((v) => (
-                      <span key={v}
-                        className="f-display flex items-center gap-2 border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-                        {v}
-                        <button onClick={() => dropCustom(v)} aria-label="Αφαίρεση"
-                          className="f-display text-[14px] leading-none">×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-3 flex gap-2">
-                  <input value={text} maxLength={MAX_CUSTOM_GOAL_LEN}
-                    onChange={(e) => setText(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
-                    placeholder="π.χ. να ανεβαίνω σκάλες χωρίς λαχάνιασμα"
-                    disabled={custom.length >= MAX_CUSTOM_GOALS}
-                    className="f-text h-12 min-w-0 flex-1 border border-black bg-white px-3 text-[14px] outline-none disabled:bg-neutral-100" />
-                  <Button size="md" variant="outline" disabled={!text.trim() || custom.length >= MAX_CUSTOM_GOALS}
-                    onClick={addCustom}>
-                    Πρόσθεσε
-                  </Button>
+                <div className="mt-2 flex flex-col">
+                  {PRIMARY_GOALS.map((g) => {
+                    const on = primary === g.key;
+                    return (
+                      <div key={g.key}>
+                        <button onClick={() => choosePrimary(g.key)}
+                          className="flex w-full items-start gap-3 py-2 text-left">
+                          <span className={`mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-black ${
+                            on ? "bg-black" : "bg-white"}`}>
+                            {on && <span className="h-[7px] w-[7px] rounded-full bg-white" />}
+                          </span>
+                          <span className={`f-text text-[14px] leading-snug ${on ? "font-bold" : ""}`}>{g.label}</span>
+                        </button>
+                        {on && (
+                          <p className="f-text mb-2 ml-8 text-[12px] leading-relaxed text-neutral-500">
+                            {g.desc}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
+
+              {!primary ? (
+                <p className="f-text mt-6 border-t border-neutral-200 pt-5 text-[13px] leading-relaxed text-neutral-500">
+                  Διάλεξε πρώτα κύριο στόχο. Μετά μπορείς να προσθέσεις κι άλλα
+                  που θέλεις να δουλέψεις.
+                </p>
+              ) : (
+                <>
+                  <div className="mt-6 border-t border-neutral-200 pt-5">
+                    <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                      2 · Τι άλλο θέλω να δουλέψω
+                    </div>
+                    <p className="f-text mt-1 text-[12px] leading-relaxed text-neutral-500">
+                      Προαιρετικά. Διάλεξε όσα θέλεις.
+                    </p>
+                  </div>
+
+                  {GOAL_GROUPS.map((g) => (
+                    <div key={g.title} className="mt-5">
+                      <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                        {g.title}
+                      </div>
+                      <div className="mt-2 flex flex-col">
+                        {g.keys.map((k) => {
+                          const on = picked.includes(k);
+                          return (
+                            <button key={k} onClick={() => toggle(k)}
+                              className="flex items-start gap-3 py-2 text-left">
+                              <span className={`mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center border border-black ${
+                                on ? "bg-black" : "bg-white"}`}>
+                                {on && <span className="f-display text-[13px] font-bold leading-none text-white">✓</span>}
+                              </span>
+                              <span className="f-text text-[14px] leading-snug">{GOAL_LABELS[k]}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="mt-6 border-t border-neutral-200 pt-5">
+                    <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                      Ο δικός σου στόχος
+                    </div>
+                    <p className="f-text mt-1 text-[12px] leading-relaxed text-neutral-500">
+                      Γράψε ό,τι θέλεις με δικά σου λόγια. Μέχρι {MAX_CUSTOM_GOALS}. Τον
+                      βλέπει ο γυμναστής σου — το πρόγραμμα δεν αλλάζει από αυτόν.
+                    </p>
+
+                    {custom.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {custom.map((v) => (
+                          <span key={v}
+                            className="f-display flex items-center gap-2 border border-dashed border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
+                            {v}
+                            <button onClick={() => dropCustom(v)} aria-label="Αφαίρεση"
+                              className="text-[13px] leading-none">×</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex gap-2">
+                      <input value={text} onChange={(e) => setText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") addCustom(); }}
+                        maxLength={MAX_CUSTOM_GOAL_LEN}
+                        placeholder="π.χ. να ανεβαίνω σκάλες χωρίς λαχάνιασμα"
+                        className="f-text min-w-0 flex-1 border border-black px-3 py-2 text-[14px] outline-none" />
+                      <Button size="md" variant="outline" disabled={!text.trim() || custom.length >= MAX_CUSTOM_GOALS}
+                        onClick={addCustom}>
+                        Πρόσθεσε
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="mt-5">
                 <Button size="lg" disabled={saving || !dirty} onClick={save}>
@@ -3174,7 +3273,24 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
   const [tab, setTab] = useState("book");
   const [askPush, setAskPush] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /* Το καρνέ προπόνησης μένει κρυφό μέχρι ο πελάτης να δηλώσει
+     στόχους. Χωρίς στόχους δεν υπάρχει πρόγραμμα να δει. */
+  const [hasGoals, setHasGoals] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  /* Μία ερώτηση με το άνοιγμα: έχει δηλώσει στόχους ή όχι. Από αυτό
+     κρίνεται αν φαίνεται ο κεραυνός. */
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data, error } = await sb.rpc("my_goals", { p_client_id: session.clientId });
+      if (!alive || error || !data) return;
+      const p = typeof data.primary === "string" ? data.primary : "";
+      const g = Array.isArray(data.goals) ? data.goals : [];
+      const c = Array.isArray(data.custom) ? data.custom : [];
+      setHasGoals(!!p || g.length > 0 || c.length > 0);
+    })();
+    return () => { alive = false; };
+  }, [session.clientId]);
   const [notifs, setNotifs] = useState([]);
   const [cancelled, setCancelled] = useState([]);
   const [hidden, setHidden] = useState(readHidden);
@@ -3375,11 +3491,13 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button type="button" onClick={() => window.openWorkout()}
-            aria-label="Άνοιγμα προπόνησης" title="Προπόνηση"
-            className="bolt-btn flex h-11 w-11 shrink-0 items-center justify-center border border-black bg-black">
-            <BoltIcon />
-          </button>
+          {hasGoals && (
+            <button type="button" onClick={() => window.openWorkout()}
+              aria-label="Άνοιγμα προπόνησης" title="Προπόνηση"
+              className="bolt-btn flex h-11 w-11 shrink-0 items-center justify-center border border-black bg-black">
+              <BoltIcon />
+            </button>
+          )}
           {chatOn && (
             <button aria-label="Μηνύματα"
               onClick={() => {
@@ -3448,7 +3566,8 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
       <main className="min-h-0 flex-1">
         {settingsOpen ? (
           <SettingsTab session={session} flash={flash} theme={theme} setTheme={setTheme}
-            onLogout={onLogout} onAccountDeleted={() => onAccountGone("self")} />
+            onLogout={onLogout} onAccountDeleted={() => onAccountGone("self")}
+            onGoalsChange={setHasGoals} />
         ) : (
           <React.Fragment>
             {tab === "book" && <BookTab session={session} flash={flash} credits={credits} hasAhead={hasAhead} onMine={reportMine} />}
@@ -4567,24 +4686,6 @@ loadAppSettings().then(() => {
 
       <div>
         <div class="panel">
-          <h3>Ώμοι προς μέση</h3>
-          <p class="hint" style="margin-top:0">Ο λόγος που καθορίζει την αθλητική σιλουέτα. Μέτρα με μεζούρα στο πλατύτερο σημείο των ώμων και στον αφαλό, την ίδια ώρα της ημέρας.</p>
-          <div class="field-pair">
-            <div class="field">
-              <label for="m-shoulders">Ώμοι (εκ.)</label>
-              <input type="number" id="m-shoulders" step="0.5" inputmode="decimal" placeholder="112">
-            </div>
-            <div class="field">
-              <label for="m-waist">Μέση (εκ.)</label>
-              <input type="number" id="m-waist" step="0.5" inputmode="decimal" placeholder="80">
-            </div>
-          </div>
-          <button class="btn btn-primary btn-block" id="m-save">Καταχώρηση μέτρησης</button>
-          <div id="ratio-display"></div>
-          <div id="ratio-chart"></div>
-        </div>
-
-        <div class="panel">
           <h3>Εβδομαδιαίος όγκος</h3>
           <div id="volume-list"></div>
         </div>
@@ -4630,7 +4731,7 @@ loadAppSettings().then(() => {
           </div>
         </div>
         <div class="field">
-          <label for="n-activity">Δραστηριότητα εκτός γυμναστηρίου</label>
+          <label for="n-activity">Δραστηριότητα στην καθημερινότητα</label>
           <select id="n-activity"></select>
         </div>
         <div class="field">
@@ -4655,65 +4756,18 @@ loadAppSettings().then(() => {
     </div>
 
     <div class="panel" id="config-panel">
-      <h3>Το πρόγραμμά μου</h3>
-
-      <div class="field" id="goal-box" hidden>
-        <div class="goal-head">Οι στόχοι σου</div>
-        <div class="goal-chips" id="goal-chips"></div>
-        <p class="hint" id="goal-hint"></p>
-        <button type="button" class="btn btn-quiet" id="goal-apply" hidden>
-          Ρύθμισέ το από τους στόχους μου
-        </button>
-      </div>
-
-      <div class="field">
-        <label for="cfg-preset">Πρόγραμμα</label>
-        <select id="cfg-preset"></select>
-      </div>
-      <p class="hint" id="cfg-tagline"></p>
-
       <div class="field">
         <label for="cfg-days">Μέρες την εβδομάδα</label>
         <select id="cfg-days"></select>
       </div>
-
-      <div class="field">
-        <label>Πώς θα είναι η εβδομάδα σου</label>
-        <div id="cfg-mix"></div>
-        <p class="hint" id="cfg-mix-hint"></p>
-      </div>
-
-      <div class="field">
-        <label>Έμφαση</label>
-        <div class="chips" id="cfg-emphasis"></div>
-      </div>
-
       <div id="cfg-preview"></div>
-      <button class="btn btn-primary btn-block" id="cfg-apply">Φτιάξε το πρόγραμμά μου</button>
-      <p class="hint">Το ιστορικό σου δεν χάνεται ποτέ. Κάθε άσκηση κρατάει τα κιλά της, ακόμα κι αν αλλάξεις εντελώς πρόγραμμα — και τα ξαναβρίσκει αν επιστρέψει αργότερα.</p>
       <div id="cfg-status"></div>
-    </div>
-
-    <div class="panel">
-      <h3>Οι αλλαγές μου στο πρόγραμμα</h3>
-      <div id="plan-list"></div>
-      <div class="btn-row">
-        <button class="btn btn-quiet" id="plan-reset">Επαναφορά όλων των ασκήσεων</button>
-      </div>
-      <p class="hint">Γυρνάει τις ασκήσεις όπως τις έφτιαξε το πρόγραμμα. Ο στόχος και οι μέρες μένουν όπως τα έχεις — και οι καταγραφές σου δεν πειράζονται.</p>
     </div>
 
     <div class="panel">
       <h3>Τα δεδομένα σου</h3>
       <button class="btn btn-primary btn-block" id="export-btn">Εξαγωγή σε PDF</button>
-      <p class="hint">Φτιάχνει μια πλήρη αναφορά: δύναμη ανά άσκηση, σωματικό βάρος, μετρήσεις, όγκο και ολόκληρο το ημερολόγιο. Ανοίγει το παράθυρο εκτύπωσης — διάλεξε <strong>Αποθήκευση ως PDF</strong>. Στο iPhone: Κοινή χρήση → Εκτύπωση → Αποθήκευση σε αρχεία.</p>
-      <div class="btn-row">
-        <button class="btn btn-quiet" id="backup-btn">Αντίγραφο ασφαλείας (JSON)</button>
-        <button class="btn btn-quiet" id="import-btn">Εισαγωγή αρχείου</button>
-        <button class="btn btn-danger" id="reset-btn">Διαγραφή όλων</button>
-      </div>
-      <p class="hint">Το JSON είναι για μεταφορά σε άλλη συσκευή — το διαβάζει η «Εισαγωγή». Το PDF είναι για διάβασμα και εκτύπωση.</p>
-      <input type="file" id="import-file" accept="application/json" class="sr-only">
+      <p class="hint">Φτιάχνει μια πλήρη αναφορά: δύναμη ανά άσκηση, σωματικό βάρος, όγκο και ολόκληρο το ημερολόγιο. Ανοίγει το παράθυρο εκτύπωσης — διάλεξε <strong>Αποθήκευση ως PDF</strong>. Στο iPhone: Κοινή χρήση → Εκτύπωση → Αποθήκευση σε αρχεία.</p>
       <div id="data-status"></div>
     </div>
   </main>
@@ -5315,6 +5369,27 @@ function __bootWorkout() {
         rest: { main: 150, aux: 120, iso: 60 },
         rir:  { main: '2–3', aux: '2–3', iso: '1–2' }
       },
+      beginner: {
+        label: 'Πρώτη φορά στο γυμναστήριο',
+        tagline: 'Λίγες ασκήσεις, καθαρή τεχνική, ήπια φορτία. Πρώτα η συνήθεια, μετά τα κιλά.',
+        nutrition: 'recomp',
+        days: 3,
+        sets: { main: 3, aux: 2, iso: 2 },
+        reps: { main: [8, 12], aux: [10, 12], iso: [12, 15] },
+        rest: { main: 150, aux: 120, iso: 60 },
+        rir:  { main: '2–3', aux: '2–3', iso: '1–2' },
+        note: 'Τις πρώτες εβδομάδες κρατάς κιλά που σε αφήνουν να εκτελείς καθαρά. Η πρόοδος έρχεται μόνη της.'
+      },
+      event: {
+        label: 'Προετοιμασία για αγώνα ή τεστ',
+        tagline: 'Δύναμη στις βασικές κινήσεις και απόδοση, με βλέμμα στην ημερομηνία.',
+        nutrition: 'recomp',
+        days: 4,
+        sets: { main: 4, aux: 3, iso: 2 },
+        reps: { main: [4, 8], aux: [8, 12], iso: [12, 15] },
+        rest: { main: 195, aux: 140, iso: 60 },
+        rir:  { main: '1–2', aux: '1–3', iso: '0–2' }
+      },
       rehab: {
         label: 'Επιστροφή μετά από τραυματισμό',
         tagline: 'Ελεγχόμενα φορτία, μεγάλα εύρη, τίποτα κοντά στην αποτυχία.',
@@ -5363,8 +5438,28 @@ function __bootWorkout() {
       sleep: 'Καλύτερος ύπνος',
       energy: 'Ενέργεια για την καθημερινότητα',
       routine: 'Σταθερή ρουτίνα άσκησης',
-      classes: 'Ομαδικά μαθήματα και παρέα'
+      classes: 'Ομαδικά μαθήματα και παρέα',
+      glutes: 'Γλουτοί',
+      arms: 'Χέρια',
+      vtaper: 'Ώμοι και πλάτη'
     };
+
+    /* Ο κύριος στόχος του πελάτη δείχνει κατευθείαν σε πρότυπο. Τα
+       κλειδιά είναι ίδια με τη goal_primary_keys() στη βάση και με το
+       PRIMARY_GOALS της εφαρμογής κρατήσεων. */
+    const PRIMARY_PRESET = {
+      recomp: 'recomp',
+      cut: 'cut',
+      bulk: 'bulk',
+      strength: 'strength',
+      endurance: 'endurance',
+      maintain: 'maintain',
+      beginner: 'beginner',
+      rehab: 'rehab',
+      event: 'event'
+    };
+    /* Ποιοι κύριοι στόχοι θέλουν και μέρα κίνησης μέσα στην εβδομάδα. */
+    const PRIMARY_CARDIO = { cut: true, endurance: true, maintain: true };
 
     const GOAL_MAP = {
       weight_loss:     { preset: 'cut',       rank: 10 },
@@ -5383,28 +5478,46 @@ function __bootWorkout() {
       sleep:           { preset: 'maintain',  rank: 1 },
       energy:          { preset: 'maintain',  rank: 1 },
       routine:         { preset: 'maintain',  rank: 1 },
-      classes:         { preset: 'maintain',  rank: 1, cardio: true }
+      classes:         { preset: 'maintain',  rank: 1, cardio: true },
+      glutes:          { emphasis: 'glutes',  rank: 1 },
+      arms:            { emphasis: 'arms',    rank: 1 },
+      vtaper:          { emphasis: 'vtaper',  rank: 1 }
     };
 
-    /* Από τη λίστα στόχων του πελάτη βγάζει μία πρόταση ρυθμίσεων.
-       Κερδίζει ο στόχος με το μεγαλύτερο rank· η ασφάλεια (rehab) πάνω
-       απ' όλα. Οι υπόλοιποι στόχοι γίνονται έμφαση. */
-    function configFromGoals(goals) {
+    /* Από τους στόχους του πελάτη βγαίνει το πρόγραμμα. Το πρότυπο το
+       ορίζει ο κύριος στόχος. Οι υπόλοιποι στόχοι γίνονται έμφαση.
+       (Οι παλιοί λογαριασμοί, χωρίς κύριο στόχο, κρατούν τον παλιό
+       τρόπο: κερδίζει ο στόχος με το μεγαλύτερο rank.) */
+    function configFromGoals(goals, primary) {
       const list = (goals || []).filter((g) => GOAL_MAP[g]);
-      let preset = null;
+      let preset = PRIMARY_PRESET[primary] || null;
       let best = -1;
       const emphasis = [];
       list.forEach((g) => {
         const m = GOAL_MAP[g];
-        if (m.preset && m.rank > best) { best = m.rank; preset = m.preset; }
+        if (!preset && m.preset && m.rank > best) { best = m.rank; preset = m.preset; }
         if (m.emphasis && !emphasis.includes(m.emphasis)) emphasis.push(m.emphasis);
       });
       return {
         preset: preset || 'recomp',
         emphasis,
-        cardio: list.some((g) => GOAL_MAP[g].cardio),
-        matched: list
+        cardio: !!PRIMARY_CARDIO[primary] || list.some((g) => GOAL_MAP[g].cardio),
+        matched: primary ? [primary].concat(list) : list
       };
+    }
+
+    /* Ο πελάτης διαλέγει μόνο πόσες μέρες. Το πώς μοιράζονται μέσα
+       στην εβδομάδα το αποφασίζει η εφαρμογή. */
+    function autoMix(days, cardio) {
+      const total = Math.min(7, Math.max(2, Math.round(Number(days) || 3)));
+      let move = 0;
+      if (cardio && total >= 3) move = total >= 5 ? 2 : 1;
+      let lift = total - move;
+      if (lift > MAX_LIFT_DAYS) { move += lift - MAX_LIFT_DAYS; lift = MAX_LIFT_DAYS; }
+      if (lift < 2) { lift = Math.min(2, total); move = total - lift; }
+      const base = { ...(LEGACY_MIX[lift] || LEGACY_MIX[3]) };
+      if (move > 0) base.walk = move;
+      return base;
     }
 
     /* ---------- Η γεννήτρια ----------
@@ -5444,7 +5557,7 @@ function __bootWorkout() {
        παίρνουν οδηγία. */
     const MOVE_GUIDE = {
       walk: {
-        focus: 'Εκτός γυμναστηρίου',
+        focus: 'Περπάτημα',
         lines: [
           '30–45 λεπτά περπάτημα ή 8.000–10.000 βήματα μέσα στην ημέρα.',
           'Ρυθμός που σου επιτρέπει να μιλάς. Δεν κουράζει τα πόδια για την επόμενη προπόνηση.',
@@ -5452,7 +5565,7 @@ function __bootWorkout() {
         ]
       },
       cardio: {
-        focus: 'Εκτός γυμναστηρίου',
+        focus: 'Καρντιό',
         lines: [
           '20–40 λεπτά ποδήλατο ή ελλειπτικό, σε σταθερό ρυθμό.',
           'Αρκετά ήπιο ώστε να μπορείς να μιλάς. Ποδήλατο ή ελλειπτικό αντί για τρέξιμο — κουράζει λιγότερο τα πόδια.',
@@ -5501,7 +5614,7 @@ function __bootWorkout() {
           ? `${def.label} ${GREEK_LETTERS[w.index]}`
           : def.label;
         if (def.kind === 'move') {
-          const guide = MOVE_GUIDE[w.type] || { focus: 'Εκτός γυμναστηρίου', lines: [] };
+          const guide = MOVE_GUIDE[w.type] || { focus: 'Κίνηση', lines: [] };
           return {
             letter: GREEK_LETTERS[i],
             name,
@@ -5612,7 +5725,7 @@ function __bootWorkout() {
       };
     }
 
-    return { CATALOG, ALIASES, SESSION_TYPES, LIFT_ORDER, MOVE_ORDER, MIX_ORDER, MAX_LIFT_DAYS, normalizeMix, mixTotal, liftTotal, mixSummary, DAY_KEYS, WEEKLY_VOLUME, GROUPS, ALTERNATIVES, NUTRITION, GUIDE, PRESETS, EMPHASIS_LIST, GOAL_LABELS, GOAL_MAP, configFromGoals, defaultConfig, buildProgram };
+    return { CATALOG, ALIASES, SESSION_TYPES, LIFT_ORDER, MOVE_ORDER, MIX_ORDER, MAX_LIFT_DAYS, normalizeMix, mixTotal, liftTotal, mixSummary, DAY_KEYS, WEEKLY_VOLUME, GROUPS, ALTERNATIVES, NUTRITION, GUIDE, PRESETS, EMPHASIS_LIST, GOAL_LABELS, GOAL_MAP, PRIMARY_PRESET, configFromGoals, autoMix, defaultConfig, buildProgram };
   })();
 
 
@@ -6202,6 +6315,7 @@ function __bootWorkout() {
       const custom = Array.isArray(data && data.custom) ? data.custom.filter(Boolean) : [];
       const other = (data && data.other) || '';
       return {
+        primary: typeof (data && data.primary) === 'string' ? data.primary : '',
         goals: Array.isArray(data && data.goals) ? data.goals : [],
         custom: custom.length || !other ? custom : [other],
         other,
@@ -6223,7 +6337,7 @@ function __bootWorkout() {
       WEEKLY_VOLUME, NUTRITION, ALTERNATIVES, GROUPS,
       SESSION_TYPES, LIFT_ORDER, MOVE_ORDER, MIX_ORDER, MAX_LIFT_DAYS,
       normalizeMix, mixTotal, liftTotal, mixSummary,
-      GOAL_LABELS, configFromGoals
+      GOAL_LABELS, configFromGoals, autoMix
     } = __data;
     const { lineChart, barRow } = __charts;
     const { fetchBrand, fetchGoals, CLIENT_URL } = __link;
@@ -7013,7 +7127,6 @@ function __bootWorkout() {
       renderExercisePicker();
       renderExerciseChart();
       renderBodyweight();
-      renderRatio();
       renderVolume();
       renderHistory();
     }
@@ -7117,43 +7230,6 @@ function __bootWorkout() {
         row.innerHTML = `<span class="k">${k}</span><span class="v">${v}</span>`;
         stats.appendChild(row);
       });
-    }
-
-    $('#m-save').addEventListener('click', () => {
-      const sh = Number($('#m-shoulders').value);
-      const wa = Number($('#m-waist').value);
-      if (!Number.isFinite(sh) || !Number.isFinite(wa) || sh <= 0 || wa <= 0) return;
-      const existing = state.measurements.find((m) => m.date === today());
-      if (existing) Object.assign(existing, { shoulders: sh, waist: wa });
-      else state.measurements.push({ id: uid(), date: today(), shoulders: sh, waist: wa });
-      save('measurements');
-      $('#m-shoulders').value = '';
-      $('#m-waist').value = '';
-      renderRatio();
-    });
-
-    function renderRatio() {
-      const host = $('#ratio-chart');
-      const display = $('#ratio-display');
-      host.innerHTML = '';
-      display.innerHTML = '';
-      const rows = [...state.measurements].sort((a, b) => a.date.localeCompare(b.date));
-      if (!rows.length) return;
-
-      const latest = rows[rows.length - 1];
-      const ratio = latest.shoulders / latest.waist;
-      display.innerHTML =
-        `<div class="headline-number" style="margin-top:10px">${ratio.toFixed(2)} <span>ώμοι προς μέση</span></div>` +
-        `<p class="hint">Γύρω στο 1.4 θεωρείται έντονα αθλητική σιλουέτα. Ανεβαίνει είτε πλαταίνοντας τους ώμους είτε στενεύοντας τη μέση — δούλεψε και τα δύο.</p>`;
-
-      if (rows.length >= 2) {
-        host.appendChild(
-          lineChart(
-            rows.map((r) => ({ label: shortDate(r.date), value: Math.round((r.shoulders / r.waist) * 100) / 100 })),
-            { label: 'Λόγος ώμων προς μέση' }
-          )
-        );
-      }
     }
 
     /* Σετ ανά μυϊκή ομάδα τις τελευταίες 7 ημέρες. Το χρησιμοποιεί και η αναφορά PDF. */
@@ -7335,31 +7411,13 @@ function __bootWorkout() {
           : 'Ο browser μπλοκάρει την τοπική αποθήκευση, οπότε τα δεδομένα κρατιούνται μόνο για αυτή τη συνεδρία. Σε κανονική σελίδα θα αποθηκεύονται μόνιμα.';
       renderSyncStatus();
       renderConfig();
-      renderPlan();
     }
 
-    /* ---------- Ο στόχος και το πρόγραμμα ---------- */
-
-    /* Ό,τι βλέπει ο χρήστης πριν πατήσει «Φτιάξε το πρόγραμμα». Μένει εδώ
-       μέχρι να το επιβεβαιώσει: αλλιώς κάθε πείραγμα στα μενού θα άλλαζε
-       το πρόγραμμα κάτω από τα πόδια του. */
-    let draft = null;
+    /* ---------- Ο στόχος και το πρόγραμμα ----------
+       Το πρόγραμμα βγαίνει από τους στόχους της εφαρμογής κρατήσεων. Εδώ
+       ο πελάτης διαλέγει μόνο πόσες μέρες θα γυμνάζεται. */
 
     const DAY_CHOICES = [2, 3, 4, 5, 6, 7];
-
-    function ensureDraft() {
-      if (!draft) {
-        const cfg = state.plan.config;
-        const mix = normalizeMix(cfg);
-        draft = {
-          ...cfg,
-          mix,
-          days: mixTotal(mix),
-          emphasis: [...(cfg.emphasis || [])]
-        };
-      }
-      return draft;
-    }
 
     /* Σύγκριση ρυθμίσεων χωρίς θόρυβο: μετράει μόνο ό,τι αλλάζει όντως
        το πρόγραμμα. */
@@ -7372,180 +7430,58 @@ function __bootWorkout() {
       });
     }
 
-    function setMix(type, value) {
-      const next = { ...draft.mix };
-      if (value <= 0) delete next[type];
-      else next[type] = value;
-      draft.mix = next;
-      renderConfig();
-    }
-
-    /* Όταν κατεβάζεις τις μέρες, κόβουμε πρώτα από το καρντιό και το
-       περπάτημα και μετά από τον τύπο με τις περισσότερες μέρες. Μία
-       μέρα με βάρη μένει πάντα. */
-    function trimMix(target) {
-      let guard = 0;
-      while (mixTotal(draft.mix) > target && guard++ < 40) {
-        let hit = MOVE_ORDER.filter((t) => draft.mix[t]).pop();
-        if (!hit && liftTotal(draft.mix) > 1) {
-          hit = LIFT_ORDER.filter((t) => draft.mix[t]).sort((a, b) => draft.mix[b] - draft.mix[a])[0];
-        }
-        if (!hit) break;
-        const v = draft.mix[hit] - 1;
-        const next = { ...draft.mix };
-        if (v <= 0) delete next[hit]; else next[hit] = v;
-        draft.mix = next;
-      }
-    }
-
-    function mixRow(type, remaining) {
-      const def = SESSION_TYPES[type];
-      const n = draft.mix[type] || 0;
-      const lifts = liftTotal(draft.mix);
-      const isLift = def.kind === 'lift';
-
-      const row = document.createElement('div');
-      row.className = 'mix-row';
-      row.dataset.on = String(n > 0);
-      row.innerHTML =
-        `<div class="mix-text"><strong>${esc(def.label)}</strong><span>${esc(def.hint)}</span></div>` +
-        '<div class="mix-step">' +
-        '<button type="button" data-act="dec" aria-label="Μία λιγότερη">−</button>' +
-        `<span class="mix-n">${n}</span>` +
-        '<button type="button" data-act="inc" aria-label="Μία παραπάνω">+</button>' +
-        '</div>';
-
-      const dec = row.querySelector('[data-act="dec"]');
-      const inc = row.querySelector('[data-act="inc"]');
-      dec.disabled = n === 0 || (isLift && lifts <= 1);
-      inc.disabled = remaining <= 0 || (isLift && lifts >= MAX_LIFT_DAYS);
-      dec.addEventListener('click', () => setMix(type, n - 1));
-      inc.addEventListener('click', () => setMix(type, n + 1));
-      return row;
-    }
-
-    function renderMix(remaining) {
-      const host = $('#cfg-mix');
-      if (!host) return;
-      host.innerHTML = '';
-
-      const block = (title, list) => {
-        const head = document.createElement('div');
-        head.className = 'mix-group';
-        head.textContent = title;
-        host.appendChild(head);
-        list.forEach((t) => host.appendChild(mixRow(t, remaining)));
-      };
-
-      block('Στο γυμναστήριο', LIFT_ORDER);
-      block('Εκτός γυμναστηρίου', MOVE_ORDER);
-
-      const hint = $('#cfg-mix-hint');
-      if (!hint) return;
-      const lifts = liftTotal(draft.mix);
-      const moves = mixTotal(draft.mix) - lifts;
-      if (remaining > 0) {
-        hint.textContent = `Μένουν ${remaining} ${remaining === 1 ? 'μέρα' : 'μέρες'} να μοιράσεις.`;
-      } else {
-        hint.textContent =
-          `${lifts} ${lifts === 1 ? 'μέρα' : 'μέρες'} με βάρη` +
-          (moves
-            ? ` και ${moves} ${moves === 1 ? 'μέρα' : 'μέρες'} εκτός γυμναστηρίου. Μοιράζονται ανάμεσα στις προπονήσεις, δεν στοιβάζονται στο τέλος.`
-            : '.');
-      }
-    }
-
-    /* ---------- Οι στόχοι από τις Ρυθμίσεις των κρατήσεων ----------
-       Δεν αλλάζουν εδώ: εδώ μόνο φαίνονται και, αν θέλει, ρυθμίζουν το
-       πρόγραμμα με ένα πάτημα. Γράφονται μία φορά, στις Ρυθμίσεις της
-       εφαρμογής κρατήσεων. */
-
+    /* Οι στόχοι γράφονται μία φορά, στις Ρυθμίσεις της εφαρμογής
+       κρατήσεων. Εδώ μόνο διαβάζονται. */
     let GOALS = null;
 
-    /* Πατάει την πρόταση των στόχων πάνω στο draft, χωρίς να πειράξει
-       πόσες μέρες έχει διαλέξει. Το καρντιό μπαίνει μόνο αν υπάρχει
-       μέρα να του δοθεί χωρίς να μείνει μία μόνο προπόνηση με βάρη. */
     function goalConfig() {
-      if (!GOALS || !GOALS.goals.length) return null;
-      const c = configFromGoals(GOALS.goals);
+      if (!GOALS) return null;
+      const c = configFromGoals(GOALS.goals, GOALS.primary);
       return c.matched.length ? c : null;
     }
 
-    function applyGoalsToDraft() {
-      const c = goalConfig();
-      if (!c) return false;
-      ensureDraft();
-      draft.preset = c.preset;
-      draft.emphasis = [...c.emphasis];
-      draft.source = 'goals';
+    function currentDays() {
+      const n = mixTotal(normalizeMix(state.plan.config));
+      return n || Math.round(Number(state.plan.config.days) || 3);
+    }
 
-      if (c.cardio && mixTotal(draft.mix) - liftTotal(draft.mix) === 0 && liftTotal(draft.mix) > 1) {
-        const from = LIFT_ORDER.filter((t) => draft.mix[t])
-          .sort((a, b) => draft.mix[b] - draft.mix[a])[0];
-        if (from) {
-          const next = { ...draft.mix };
-          if (next[from] <= 1) delete next[from]; else next[from] = next[from] - 1;
-          next.cardio = (next.cardio || 0) + 1;
-          draft.mix = next;
-        }
+    /* Οι ρυθμίσεις που προκύπτουν από τους στόχους, για τόσες μέρες. */
+    function configFor(days) {
+      const c = goalConfig();
+      const n = Math.min(7, Math.max(2, Math.round(Number(days) || 3)));
+      const next = {
+        ...state.plan.config,
+        preset: c ? c.preset : (state.plan.config.preset || 'recomp'),
+        emphasis: c ? [...c.emphasis] : [...(state.plan.config.emphasis || [])],
+        mix: autoMix(n, c ? c.cardio : false),
+        source: c ? 'goals' : (state.plan.config.source || 'default')
+      };
+      next.days = mixTotal(next.mix);
+      delete next.cardio;
+      return next;
+    }
+
+    /* Γράφει τις ρυθμίσεις και ξαναχτίζει — μόνο αν άλλαξε κάτι. */
+    function applyPlanConfig(next, note) {
+      const before = configKey(state.plan.config);
+      state.plan.config = next;
+      if (before === configKey(next)) { renderConfig(); return false; }
+      savePlan();
+      rebuild();
+      state.day = suggestedDay();
+      renderAll();
+      renderConfig();
+      const p = PRESETS[state.plan.config.preset];
+      if (p) {
+        const sel = $('#n-goal');
+        if (sel) { sel.value = p.nutrition; renderNutrition(); }
       }
+      if (note && $('#cfg-status')) setStatus($('#cfg-status'), note, true);
       return true;
     }
 
-    /* Ίδιες ρυθμίσεις με ό,τι προτείνουν οι στόχοι; Τότε δεν έχει νόημα
-       το κουμπί. */
-    function draftMatchesGoals() {
-      const c = goalConfig();
-      if (!c) return false;
-      ensureDraft();
-      const em = [...(draft.emphasis || [])].sort().join(',');
-      return draft.preset === c.preset && em === [...c.emphasis].sort().join(',');
-    }
-
-    function renderGoals() {
-      const box = $('#goal-box');
-      if (!box) return;
-
-      const picked = (GOALS && GOALS.goals) || [];
-      const custom = (GOALS && GOALS.custom) || [];
-
-      if (!GOALS) { box.hidden = true; return; }
-      box.hidden = false;
-
-      const chips = $('#goal-chips');
-      chips.innerHTML = '';
-      if (!picked.length && !custom.length) {
-        const s = document.createElement('span');
-        s.className = 'goal-chip goal-chip-empty';
-        s.textContent = 'Δεν έχεις δηλώσει στόχους';
-        chips.appendChild(s);
-      } else {
-        picked.forEach((g) => {
-          const s = document.createElement('span');
-          s.className = 'goal-chip';
-          s.textContent = GOAL_LABELS[g] || g;
-          chips.appendChild(s);
-        });
-        custom.forEach((g) => {
-          const s = document.createElement('span');
-          s.className = 'goal-chip';
-          s.textContent = g;
-          chips.appendChild(s);
-        });
-      }
-
-      const c = goalConfig();
-      const hint = $('#goal-hint');
-      if (hint) {
-        hint.textContent = !picked.length && !custom.length
-          ? 'Γράψε τους στόχους σου στις Ρυθμίσεις της εφαρμογής κρατήσεων — πάτα τον κεραυνό.'
-          : c
-            ? 'Από τους στόχους σου βγαίνει το πρόγραμμα «' + ((PRESETS[c.preset] || {}).label || '') + '».'
-            : 'Οι στόχοι σου δεν αλλάζουν τις ασκήσεις — διάλεξε πρόγραμμα από κάτω.';
-      }
-
-      const btn = $('#goal-apply');
-      if (btn) btn.hidden = !c || draftMatchesGoals();
+    function setDays(n) {
+      applyPlanConfig(configFor(n), 'Έτοιμο. Το πρόγραμμά σου ξαναφτιάχτηκε.');
     }
 
     async function loadGoals() {
@@ -7553,84 +7489,48 @@ function __bootWorkout() {
       try { data = await fetchGoals(); } catch (e) { data = null; }
       if (!data) return;
       GOALS = {
+        primary: typeof data.primary === 'string' ? data.primary : '',
         goals: Array.isArray(data.goals) ? data.goals : [],
         custom: Array.isArray(data.custom) ? data.custom : []
       };
 
-      /* Πρώτη φορά, χωρίς να έχει πειράξει τίποτα: στρώνουμε το
-         πρόγραμμα από τους στόχους του αντί να του δώσουμε το
-         προεπιλεγμένο. */
-      if (state.plan.config.source === 'default' && goalConfig()) {
-        draft = null;
-        if (applyGoalsToDraft() && Number(draft.days) === mixTotal(draft.mix)) {
-          state.plan.config = {
-            ...state.plan.config,
-            preset: draft.preset,
-            mix: { ...draft.mix },
-            days: mixTotal(draft.mix),
-            emphasis: [...draft.emphasis],
-            source: 'goals'
-          };
-          delete state.plan.config.cardio;
-          savePlan();
-          rebuild();
-          state.day = suggestedDay();
-          renderAll();
-          renderPlan();
-        }
-      }
-      renderGoals();
+      const c = goalConfig();
+      if (!c) { renderConfig(); return; }
+
+      /* Το πρόγραμμα ακολουθεί πάντα τους στόχους. Οι μέρες μένουν όπως
+         τις έχει διαλέξει ο πελάτης — την πρώτη φορά τις προτείνει το
+         ίδιο το πρότυπο. */
+      const first = state.plan.config.source === 'default';
+      const days = first
+        ? ((PRESETS[c.preset] || {}).days || 3)
+        : currentDays();
+      applyPlanConfig(configFor(days));
       renderConfig();
     }
 
     function renderConfig() {
       const host = $('#config-panel');
       if (!host) return;
-      ensureDraft();
-      renderGoals();
 
-      const presetSel = $('#cfg-preset');
-      presetSel.innerHTML = Object.keys(PRESETS)
-        .map((id) => `<option value="${id}"${id === draft.preset ? ' selected' : ''}>${esc(PRESETS[id].label)}</option>`)
-        .join('');
-
+      const days = currentDays();
       const daysSel = $('#cfg-days');
-      const choices = DAY_CHOICES.includes(Number(draft.days))
-        ? DAY_CHOICES
-        : [...DAY_CHOICES, Number(draft.days)].sort((a, b) => a - b);
-      daysSel.innerHTML = choices
-        .map((d) => `<option value="${d}"${d === Number(draft.days) ? ' selected' : ''}>${d} μέρες την εβδομάδα</option>`)
-        .join('');
+      if (daysSel) {
+        const choices = DAY_CHOICES.includes(days)
+          ? DAY_CHOICES
+          : [...DAY_CHOICES, days].sort((a, b) => a - b);
+        daysSel.innerHTML = choices
+          .map((d) => `<option value="${d}"${d === days ? ' selected' : ''}>${d} μέρες την εβδομάδα</option>`)
+          .join('');
+      }
 
-      const remaining = Number(draft.days) - mixTotal(draft.mix);
-      renderMix(remaining);
-
-      const chips = $('#cfg-emphasis');
-      chips.innerHTML = '';
-      EMPHASIS_LIST.forEach((e) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'chip';
-        b.dataset.on = String(draft.emphasis.includes(e.id));
-        b.textContent = e.label;
-        b.addEventListener('click', () => {
-          draft.emphasis = draft.emphasis.includes(e.id)
-            ? draft.emphasis.filter((x) => x !== e.id)
-            : [...draft.emphasis, e.id];
-          renderConfig();
-        });
-        chips.appendChild(b);
-      });
-
-      $('#cfg-tagline').textContent = (PRESETS[draft.preset] || {}).tagline || '';
-
-      /* Προεπισκόπηση: τι θα γίνει αν το εφαρμόσει. */
-      const preview = buildProgram(draft);
-      $('#cfg-preview').innerHTML =
-        `<div class="preview-head">${esc(preview.label)}</div>` +
-        preview.order
+      const preview = $('#cfg-preview');
+      if (!preview) return;
+      const built = buildProgram(state.plan.config);
+      preview.innerHTML =
+        `<div class="preview-head">${esc(built.label)}</div>` +
+        built.order
           .map((d) => {
-            const day = preview.program[d];
+            const day = built.program[d];
             const text = day.kind === 'move'
               ? (day.guide || [])[0] || ''
               : day.exercises.map((e) => e.name).join(' · ');
@@ -7638,109 +7538,7 @@ function __bootWorkout() {
               `<span>${esc(text)}</span></div>`;
           })
           .join('') +
-        (preview.note ? `<p class="hint">${esc(preview.note)}</p>` : '');
-
-      const same = configKey(draft) === configKey(state.plan.config);
-      const apply = $('#cfg-apply');
-      apply.disabled = same || remaining !== 0;
-      apply.textContent = remaining > 0
-        ? `Μοίρασε ακόμα ${remaining} ${remaining === 1 ? 'μέρα' : 'μέρες'}`
-        : same
-          ? 'Αυτό είναι ήδη το πρόγραμμά σου'
-          : 'Φτιάξε το πρόγραμμά μου';
-    }
-
-    function applyConfig() {
-      ensureDraft();
-      if (Number(draft.days) !== mixTotal(draft.mix)) return;
-      const before = configKey(state.plan.config);
-      state.plan.config = {
-        ...state.plan.config,
-        preset: draft.preset,
-        mix: { ...draft.mix },
-        days: mixTotal(draft.mix),
-        emphasis: [...draft.emphasis]
-      };
-      delete state.plan.config.cardio;
-      if (before !== configKey(state.plan.config)) {
-        savePlan();
-        rebuild();
-        state.day = suggestedDay();
-        renderAll();
-        renderConfig();
-        renderPlan();
-        const p = PRESETS[state.plan.config.preset];
-        if (p) {
-          const sel = $('#n-goal');
-          if (sel) {
-            sel.value = p.nutrition;
-            renderNutrition();
-          }
-        }
-        if ($('#cfg-status')) setStatus(
-          $('#cfg-status'),
-          'Έτοιμο. Το ιστορικό σου έμεινε ολόκληρο — οι ασκήσεις που συνεχίζουν κρατάνε τα κιλά τους.',
-          true
-        );
-      }
-    }
-
-    /* ---------- Οι αλλαγές σου στο πρόγραμμα ---------- */
-
-    function renderPlan() {
-      const host = $('#plan-list');
-      if (!host) return;
-      host.innerHTML = '';
-
-      const items = [];
-      DAY_ORDER.forEach((d) => {
-        dayExercises(d, true).forEach((ex) => {
-          const base = (PROGRAM[d].exercises || []).find((e) => e.id === ex.id);
-          const letter = weekdayOf(d) || PROGRAM[d].letter;
-          if (ex.hidden) {
-            items.push({ ex, text: `${ex.name} · αφαιρέθηκε από ${letter}`, action: 'restore' });
-          } else if (ex.custom) {
-            items.push({ ex, text: `${ex.name} · δική σου προσθήκη, ${letter}`, action: 'delete' });
-          } else if (ex.changed) {
-            const label = base && base.name !== ex.name ? `${base.name} → ${ex.name}` : ex.name;
-            items.push({ ex, text: `${label} · ${letter}`, action: 'reset' });
-          }
-        });
-      });
-
-      if (!items.length) {
-        host.innerHTML =
-          '<div class="empty">Το πρόγραμμα είναι όπως ήρθε. Άλλαξε ό,τι θέλεις με το κουμπί «Αλλαγή» πάνω σε κάθε άσκηση.</div>';
-        return;
-      }
-
-      const labels = { restore: 'Επανάφερε', delete: 'Διαγραφή', reset: 'Αρχική' };
-
-      items.forEach(({ ex, text, action }) => {
-        const row = document.createElement('div');
-        row.className = 'plan-item';
-        row.innerHTML = `<span>${esc(text)}</span>`;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = labels[action];
-        btn.addEventListener('click', () => {
-          if (action === 'restore') showExercise(ex.id);
-          if (action === 'reset') {
-            delete state.plan.overrides[ex.id];
-            savePlan();
-          }
-          if (action === 'delete') {
-            if (!confirm(`Θα διαγραφεί οριστικά η «${ex.name}». Συνέχεια;`)) return;
-            state.plan.extras[ex.day] = (state.plan.extras[ex.day] || []).filter((e) => e.id !== ex.id);
-            delete state.plan.overrides[ex.id];
-            savePlan();
-          }
-          renderAll();
-          renderPlan();
-        });
-        row.appendChild(btn);
-        host.appendChild(row);
-      });
+        (built.note ? `<p class="hint">${esc(built.note)}</p>` : '');
     }
 
     function syncWording() {
@@ -7785,18 +7583,6 @@ function __bootWorkout() {
     const syncNowBtn = $('#sync-now');
     if (syncNowBtn) syncNowBtn.addEventListener('click', () => store.syncNow());
 
-    const planReset = $('#plan-reset');
-    if (planReset) {
-      planReset.addEventListener('click', () => {
-        if (!confirm('Όλες οι ασκήσεις γυρνούν στο αρχικό πρόγραμμα. Οι καταγραφές σου δεν πειράζονται. Συνέχεια;')) return;
-        state.plan = { ...blankPlan(), config: state.plan.config };
-        savePlan();
-        rebuild();
-        renderAll();
-        renderPlan();
-      });
-    }
-
     window.addEventListener('lean:sync', renderSyncStatus);
 
     /* Όταν έρθουν νέα δεδομένα από άλλη συσκευή, ανανέωσε τις οθόνες —
@@ -7808,7 +7594,6 @@ function __bootWorkout() {
       state.profile = store.read('profile', null);
       state.plan = normalizePlan(store.read('plan', null));
       if (state.editing || state.swapping) return;
-      draft = null;
       rebuild();
       loadProfile();
       renderAll();
@@ -7999,27 +7784,6 @@ function __bootWorkout() {
           tableHTML(['Ημερομηνία', 'Βάρος', 'Διαφορά'], rows);
       }
 
-      /* Ώμοι προς μέση */
-      let ratio = '<p class="empty">Δεν υπάρχουν μετρήσεις.</p>';
-      if (ms.length) {
-        const latest = ms[ms.length - 1];
-        const rows = ms
-          .slice(-16)
-          .reverse()
-          .map((r) => [
-            longDate(r.date),
-            num(r.shoulders) + ' εκ.',
-            num(r.waist) + ' εκ.',
-            num(r.shoulders / r.waist, 2)
-          ]);
-        ratio =
-          `<div class="strip"><span><b>${num(latest.shoulders / latest.waist, 2)}</b> λόγος ώμων προς μέση</span>` +
-          `<span><b>${num(latest.shoulders)} εκ.</b> ώμοι</span>` +
-          `<span><b>${num(latest.waist)} εκ.</b> μέση</span></div>` +
-          tableHTML(['Ημερομηνία', 'Ώμοι', 'Μέση', 'Λόγος'], rows) +
-          '<p class="note">Γύρω στο 1.4 θεωρείται έντονα αθλητική σιλουέτα. Ανεβαίνει είτε πλαταίνοντας τους ώμους είτε στενεύοντας τη μέση.</p>';
-      }
-
       /* Εβδομαδιαίος όγκος */
       const volume = tableHTML(
         ['Μυϊκή ομάδα', 'Σετ 7 ημερών', 'Στόχος'],
@@ -8160,9 +7924,6 @@ function __bootWorkout() {
       <h2>Σωματικό βάρος</h2>
       ${bodyweight}
 
-      <h2>Ώμοι προς μέση</h2>
-      ${ratio}
-
       <h2>Εβδομαδιαίος όγκος</h2>
       ${volume}
       <p class="note">Σετ που καταγράφηκαν τις τελευταίες 7 ημέρες, σε σχέση με το εβδομαδιαίο εύρος που στηρίζει η έρευνα.</p>
@@ -8224,52 +7985,6 @@ function __bootWorkout() {
       );
     });
 
-    $('#backup-btn').addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify(store.exportAll(), null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `tsak-${today()}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      setStatus($('#data-status'), 'Το αντίγραφο ασφαλείας κατέβηκε.', true);
-    });
-
-    $('#import-btn').addEventListener('click', () => $('#import-file').click());
-
-    $('#import-file').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      try {
-        store.importAll(JSON.parse(await file.text()));
-        state.sessions = store.read('sessions', []);
-        state.bodyweight = store.read('bodyweight', []);
-        state.measurements = store.read('measurements', []);
-        state.profile = store.read('profile', null);
-        state.plan = normalizePlan(store.read('plan', null));
-        draft = null;
-        rebuild();
-        renderAll();
-        renderSettings();
-        setStatus($('#data-status'), 'Τα δεδομένα φορτώθηκαν.', true);
-      } catch (err) {
-        setStatus($('#data-status'), 'Το αρχείο δεν διαβάστηκε: ' + err.message, false);
-      }
-      e.target.value = '';
-    });
-
-    $('#reset-btn').addEventListener('click', async () => {
-      if (!confirm('Θα διαγραφούν όλες οι προπονήσεις και οι μετρήσεις, και από τη συσκευή και από το cloud. Συνέχεια;')) return;
-      await store.clearAll();
-      state.sessions = [];
-      state.bodyweight = [];
-      state.measurements = [];
-      state.profile = null;
-      state.plan = blankPlan();
-      renderAll();
-      renderPlan();
-      setStatus($('#data-status'), 'Όλα διαγράφηκαν.', true);
-    });
-
     /* ---------- Ρυθμίσεις: χειριστήρια ---------- */
 
     /* Κάθε χειριστήριο δένεται μόνο αν υπάρχει στην οθόνη. Ένα κουμπί που
@@ -8280,29 +7995,9 @@ function __bootWorkout() {
       if (el) el.addEventListener(ev, fn);
     }
 
-    on('#cfg-preset', 'change', (e) => {
-      ensureDraft();
-      draft.preset = e.target.value;
-      draft.source = 'manual';
-      renderConfig();
-    });
-
     on('#cfg-days', 'change', (e) => {
-      ensureDraft();
-      draft.days = Number(e.target.value);
-      draft.source = 'manual';
-      trimMix(draft.days);
-      renderConfig();
+      setDays(Number(e.target.value));
     });
-
-    on('#goal-apply', 'click', () => {
-      if (applyGoalsToDraft()) {
-        trimMix(Number(draft.days));
-        renderConfig();
-      }
-    });
-
-    on('#cfg-apply', 'click', applyConfig);
 
     const clientLink = $('#client-link');
     if (clientLink) clientLink.href = CLIENT_URL;
