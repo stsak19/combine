@@ -428,6 +428,95 @@ body.mode-workout {
 
 .cardio-note p:last-child { margin-bottom: 0; }
 
+/* Καταγραφή: τι έκανες στην πράξη — βήματα ή τρέξιμο. */
+.act-log {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.act-kind {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  background: var(--surface-sunk);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+}
+
+.act-kind button {
+  min-height: 38px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.act-kind button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.act-time {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.act-time span {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 21px;
+  color: var(--muted);
+}
+
+.act-pace {
+  margin: 2px 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.act-done {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.act-done .big {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.act-done .small {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.act-done button {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 8px 0;
+}
+
 /* ---------- Κάρτα άσκησης ---------- */
 
 .exercise {
@@ -6111,7 +6200,7 @@ function __bootWorkout() {
     /* Προπόνηση χωρίς κανένα σετ και όχι ολοκληρωμένη = τίποτα να κρατηθεί.
        Μια ολοκληρωμένη μέρα περπατήματος δεν έχει σετ, αλλά μετράει. */
     function isEmptySession(row) {
-      if (!row || row.done) return false;
+      if (!row || row.done || row.activity) return false;
       return !Object.values(row.entries || {}).some((sets) => Array.isArray(sets) && sets.some(Boolean));
     }
 
@@ -6702,6 +6791,33 @@ function __bootWorkout() {
 
     const sortedSessions = () => [...state.sessions].sort((a, b) => a.date.localeCompare(b.date));
 
+    /* ---------- Περπάτημα / τρέξιμο ----------
+       session.activity = { type: 'walk', steps } ή { type: 'run', km, sec }.
+       Όταν σβηστεί γίνεται null (όχι undefined), ώστε να φτάσει στον
+       διακομιστή και να σβηστεί κι εκεί. */
+    const mmss = (sec) => {
+      const t = Math.round(sec);
+      const h = Math.floor(t / 3600);
+      const m = Math.floor((t % 3600) / 60);
+      const s = String(t % 60).padStart(2, '0');
+      return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+    };
+
+    function activitySummary(a) {
+      if (!a) return null;
+      if (a.type === 'walk' && a.steps > 0) {
+        return { big: `${num(a.steps, 0)} βήματα`, small: '' };
+      }
+      if (a.type === 'run' && a.km > 0) {
+        const pace = a.sec > 0 ? ` · ${mmss(a.sec / a.km)} /km` : '';
+        return {
+          big: `${num(a.km, 2)} km`,
+          small: (a.sec > 0 ? `σε ${mmss(a.sec)}` : '') + pace
+        };
+      }
+      return null;
+    }
+
     /* Τελευταία φορά που έγινε η άσκηση, εξαιρώντας τη σημερινή εγγραφή. */
     /* Και τα παλιά id της πρώτης έκδοσης, ώστε να μη χαθεί ιστορικό όταν
        αλλάζει πρόγραμμα. Γράφουμε πάντα στο καινούριο id, διαβάζουμε και
@@ -6851,6 +6967,8 @@ function __bootWorkout() {
         btn.addEventListener('click', () => {
           state.day = d;
           state.editing = null;
+          state.actEditing = false;
+          state.actType = null;
           renderTrain();
         });
         strip.appendChild(btn);
@@ -6877,6 +6995,7 @@ function __bootWorkout() {
           `<h3>${esc(day.name)}</h3>` +
           (day.guide || []).map((l) => `<p>${esc(l)}</p>`).join('');
         list.appendChild(box);
+        list.appendChild(buildActivityLog(day, session));
 
         const finishMove = $('#finish-session');
         finishMove.textContent =
@@ -7269,6 +7388,162 @@ function __bootWorkout() {
       return box;
     }
 
+    function buildActivityLog(day, session) {
+      const saved = session && session.activity;
+      const summary = activitySummary(saved);
+      const wrap = document.createElement('section');
+      wrap.className = 'act-log';
+
+      if (summary && !state.actEditing) {
+        wrap.innerHTML =
+          `<div class="act-done"><div><span class="big">${esc(summary.big)}</span>` +
+          (summary.small ? `<span class="small">${esc(summary.small)}</span>` : '') +
+          `</div><button type="button" data-edit>Αλλαγή</button></div>`;
+        $('[data-edit]', wrap).addEventListener('click', () => {
+          state.actEditing = true;
+          renderTrain();
+        });
+        return wrap;
+      }
+
+      if (!state.actType) {
+        state.actType = saved ? saved.type : day.moveType === 'walk' ? 'walk' : 'run';
+      }
+      const type = state.actType;
+      const secOf = saved && saved.type === 'run' ? saved.sec || 0 : 0;
+
+      wrap.innerHTML = `
+        <div class="act-kind" role="group" aria-label="Τι έκανες">
+          <button type="button" data-kind="walk" aria-pressed="${type === 'walk'}">Περπάτησα</button>
+          <button type="button" data-kind="run" aria-pressed="${type === 'run'}">Έτρεξα</button>
+        </div>
+        ${type === 'walk' ? `
+        <div class="field">
+          <label for="act-steps">Βήματα</label>
+          <div class="stepper">
+            <button type="button" data-steps="-500" aria-label="Λιγότερα βήματα">−</button>
+            <input id="act-steps" type="number" inputmode="numeric" step="100" min="0"
+              value="${saved && saved.type === 'walk' ? saved.steps : ''}" placeholder="0">
+            <button type="button" data-steps="500" aria-label="Περισσότερα βήματα">+</button>
+          </div>
+        </div>` : `
+        <div class="field">
+          <label for="act-km">Χιλιόμετρα</label>
+          <div class="stepper">
+            <button type="button" data-km="-0.5" aria-label="Λιγότερα χιλιόμετρα">−</button>
+            <input id="act-km" type="number" inputmode="decimal" step="0.1" min="0"
+              value="${saved && saved.type === 'run' ? saved.km : ''}" placeholder="0">
+            <button type="button" data-km="0.5" aria-label="Περισσότερα χιλιόμετρα">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="act-min">Χρόνος (λεπτά : δευτερόλεπτα)</label>
+          <div class="act-time">
+            <div class="stepper"><input id="act-min" type="number" inputmode="numeric" min="0" step="1"
+              aria-label="Λεπτά" value="${secOf ? Math.floor(secOf / 60) : ''}" placeholder="0"></div>
+            <span aria-hidden="true">:</span>
+            <div class="stepper"><input id="act-sec" type="number" inputmode="numeric" min="0" max="59" step="1"
+              aria-label="Δευτερόλεπτα" value="${secOf ? secOf % 60 : ''}" placeholder="00"></div>
+          </div>
+        </div>
+        <p class="act-pace" id="act-pace"></p>`}
+        <div class="editor-actions">
+          <button class="btn btn-primary" type="button" data-save>Αποθήκευση</button>
+          ${saved ? '<button class="btn btn-quiet" type="button" data-clear>Σβήσε</button>' : ''}
+        </div>`;
+
+      $$('[data-kind]', wrap).forEach((b) =>
+        b.addEventListener('click', () => {
+          state.actType = b.dataset.kind;
+          renderTrain();
+        })
+      );
+
+      const n = (el) => (el && el.value !== '' ? Number(String(el.value).replace(',', '.')) : 0);
+
+      if (type === 'walk') {
+        const input = $('#act-steps', wrap);
+        $$('[data-steps]', wrap).forEach((b) =>
+          b.addEventListener('click', () => {
+            input.value = Math.max(0, n(input) + Number(b.dataset.steps));
+          })
+        );
+      } else {
+        const km = $('#act-km', wrap);
+        const mi = $('#act-min', wrap);
+        const se = $('#act-sec', wrap);
+        const paint = () => {
+          const k = n(km);
+          const t = n(mi) * 60 + n(se);
+          $('#act-pace', wrap).textContent = k > 0 && t > 0 ? `Ρυθμός ${mmss(t / k)} ανά km` : '';
+        };
+        $$('[data-km]', wrap).forEach((b) =>
+          b.addEventListener('click', () => {
+            km.value = Math.max(0, +(n(km) + Number(b.dataset.km)).toFixed(2));
+            paint();
+          })
+        );
+        [km, mi, se].forEach((el) => el.addEventListener('input', paint));
+        paint();
+      }
+
+      $('[data-save]', wrap).addEventListener('click', () => {
+        let activity;
+        if (type === 'walk') {
+          const steps = Math.round(n($('#act-steps', wrap)));
+          if (!Number.isFinite(steps) || steps < 1 || steps > 200000) {
+            alert('Γράψε πόσα βήματα έκανες.');
+            return;
+          }
+          activity = { type: 'walk', steps };
+        } else {
+          const k = +n($('#act-km', wrap)).toFixed(2);
+          const m = Math.floor(n($('#act-min', wrap)));
+          const sc = Math.floor(n($('#act-sec', wrap)));
+          if (!Number.isFinite(k) || k <= 0 || k > 500) {
+            alert('Γράψε πόσα χιλιόμετρα έτρεξες.');
+            return;
+          }
+          if (!Number.isFinite(m) || !Number.isFinite(sc) || m < 0 || sc < 0 || sc > 59) {
+            alert('Ο χρόνος θέλει λεπτά και δευτερόλεπτα από 0 έως 59.');
+            return;
+          }
+          const sec = m * 60 + sc;
+          if (sec < 1) {
+            alert('Γράψε σε πόσο χρόνο το έτρεξες.');
+            return;
+          }
+          activity = { type: 'run', km: k, sec };
+        }
+        const s = ensureSession(today(), state.day);
+        s.activity = activity;
+        s.done = true;
+        save('sessions');
+        state.actEditing = false;
+        state.actType = null;
+        renderTrain();
+        renderMasthead();
+        renderProgress();
+      });
+
+      const clearBtn = $('[data-clear]', wrap);
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          const s = sessionFor(today(), state.day);
+          if (s) {
+            s.activity = null;
+            save('sessions');
+          }
+          state.actEditing = false;
+          state.actType = null;
+          renderTrain();
+          renderProgress();
+        });
+      }
+
+      return wrap;
+    }
+
     $('#finish-session').addEventListener('click', () => {
       const day = PROGRAM[state.day] || {};
       const isMove = day.kind === 'move';
@@ -7499,9 +7774,12 @@ function __bootWorkout() {
         item.type = 'button';
         item.className = 'history-item';
         item.setAttribute('aria-label', `Επεξεργασία: ${dayLabel(s.day)}, ${shortDate(s.date)}`);
-        item.innerHTML =
-          `<span>${esc(dayLabel(s.day))} · ${setCount} σετ${s.done ? '' : ' (ανοιχτή)'}</span>` +
-          `<span class="when">${shortDate(s.date)} · ${num(volume, 0)} kg<span class="go" aria-hidden="true"> ›</span></span>`;
+        const act = activitySummary(s.activity);
+        item.innerHTML = act && !setCount
+          ? `<span>${esc(dayLabel(s.day))} · ${esc(act.big)}</span>` +
+            `<span class="when">${shortDate(s.date)}${act.small ? ' · ' + esc(act.small.replace(/^σε /, '')) : ''}<span class="go" aria-hidden="true"> ›</span></span>`
+          : `<span>${esc(dayLabel(s.day))} · ${setCount} σετ${s.done ? '' : ' (ανοιχτή)'}</span>` +
+            `<span class="when">${shortDate(s.date)} · ${num(volume, 0)} kg<span class="go" aria-hidden="true"> ›</span></span>`;
         item.addEventListener('click', () => openSessionEditor(s.id));
         host.appendChild(item);
       });
@@ -7700,7 +7978,7 @@ function __bootWorkout() {
             return;
           }
 
-          if (!Object.keys(entries).length && !draft.done) {
+          if (!Object.keys(entries).length && !draft.done && !session.activity) {
             if (confirm('Δεν έμεινε κανένα σετ. Να διαγραφεί η προπόνηση;')) removeSession();
             return;
           }
