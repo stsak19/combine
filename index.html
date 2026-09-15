@@ -4756,11 +4756,9 @@ loadAppSettings().then(() => {
     </div>
 
     <div class="panel" id="config-panel">
-      <div class="field">
-        <label for="cfg-days">Μέρες την εβδομάδα</label>
-        <select id="cfg-days"></select>
-      </div>
-      <div id="cfg-preview"></div>
+      <h3>Η εβδομάδα σου</h3>
+      <p class="hint" id="cfg-total"></p>
+      <div id="cfg-mix"></div>
       <div id="cfg-status"></div>
     </div>
 
@@ -7500,6 +7498,18 @@ function __bootWorkout() {
       /* Το πρόγραμμα ακολουθεί πάντα τους στόχους. Οι μέρες μένουν όπως
          τις έχει διαλέξει ο πελάτης — την πρώτη φορά τις προτείνει το
          ίδιο το πρότυπο. */
+      if (state.plan.config.custom) {
+        /* Ο πελάτης έχει στήσει μόνος του την εβδομάδα — την κρατάμε,
+           αλλάζει μόνο ο στόχος. */
+        applyPlanConfig({
+          ...state.plan.config,
+          preset: c.preset,
+          emphasis: [...c.emphasis],
+          source: 'goals'
+        });
+        renderConfig();
+        return;
+      }
       const first = state.plan.config.source === 'default';
       const days = first
         ? ((PRESETS[c.preset] || {}).days || 3)
@@ -7512,33 +7522,54 @@ function __bootWorkout() {
       const host = $('#config-panel');
       if (!host) return;
 
-      const days = currentDays();
-      const daysSel = $('#cfg-days');
-      if (daysSel) {
-        const choices = DAY_CHOICES.includes(days)
-          ? DAY_CHOICES
-          : [...DAY_CHOICES, days].sort((a, b) => a - b);
-        daysSel.innerHTML = choices
-          .map((d) => `<option value="${d}"${d === days ? ' selected' : ''}>${d} μέρες την εβδομάδα</option>`)
-          .join('');
+      const mix = normalizeMix(state.plan.config);
+      const total = mixTotal(mix);
+      const lifts = liftTotal(mix);
+
+      const totalEl = $('#cfg-total');
+      if (totalEl) {
+        totalEl.innerHTML = `<strong>${total} ${total === 1 ? 'μέρα' : 'μέρες'} την εβδομάδα</strong>` +
+          (total >= 7 ? ' · γέμισε η εβδομάδα' : ' · πάτα + για να προσθέσεις μέρα');
       }
 
-      const preview = $('#cfg-preview');
-      if (!preview) return;
-      const built = buildProgram(state.plan.config);
-      preview.innerHTML =
-        `<div class="preview-head">${esc(built.label)}</div>` +
-        built.order
-          .map((d) => {
-            const day = built.program[d];
-            const text = day.kind === 'move'
-              ? (day.guide || [])[0] || ''
-              : day.exercises.map((e) => e.name).join(' · ');
-            return `<div class="preview-day"><strong>${esc(day.letter)} · ${esc(day.name)}</strong>` +
-              `<span>${esc(text)}</span></div>`;
-          })
-          .join('') +
-        (built.note ? `<p class="hint">${esc(built.note)}</p>` : '');
+      const box = $('#cfg-mix');
+      if (!box) return;
+      const row = (t) => {
+        const def = SESSION_TYPES[t];
+        const n = mix[t] || 0;
+        const isLift = def.kind === 'lift';
+        const canAdd = total < 7 && (!isLift || lifts < MAX_LIFT_DAYS);
+        const canRemove = n > 0 && !(isLift && lifts <= 1);
+        return `<div class="mix-row" data-on="${n > 0}">` +
+          `<div class="mix-text"><strong>${esc(def.label)}</strong><span>${esc(def.hint || '')}</span></div>` +
+          `<div class="mix-step">` +
+          `<button type="button" data-type="${t}" data-d="-1" aria-label="Λιγότερες μέρες ${esc(def.label)}"${canRemove ? '' : ' disabled'}>−</button>` +
+          `<span class="mix-n">${n}</span>` +
+          `<button type="button" data-type="${t}" data-d="1" aria-label="Περισσότερες μέρες ${esc(def.label)}"${canAdd ? '' : ' disabled'}>+</button>` +
+          `</div></div>`;
+      };
+      box.innerHTML =
+        `<div class="mix-group">Με βάρη</div>` + LIFT_ORDER.map(row).join('') +
+        `<div class="mix-group">Εκτός γυμναστηρίου</div>` + MOVE_ORDER.map(row).join('');
+    }
+
+    /* Ο πελάτης φτιάχνει μόνος του την εβδομάδα: πόσες μέρες από κάθε είδος. */
+    function stepMix(type, delta) {
+      const mix = normalizeMix(state.plan.config);
+      const def = SESSION_TYPES[type];
+      if (!def) return;
+      const n = (mix[type] || 0) + delta;
+      if (delta > 0) {
+        if (mixTotal(mix) >= 7) return;
+        if (def.kind === 'lift' && liftTotal(mix) >= MAX_LIFT_DAYS) return;
+      } else {
+        if (n < 0) return;
+        if (def.kind === 'lift' && liftTotal(mix) <= 1) return;
+      }
+      if (n > 0) mix[type] = n; else delete mix[type];
+      const next = { ...state.plan.config, mix, days: mixTotal(mix), custom: true };
+      delete next.cardio;
+      applyPlanConfig(next);
     }
 
     function syncWording() {
@@ -7995,8 +8026,10 @@ function __bootWorkout() {
       if (el) el.addEventListener(ev, fn);
     }
 
-    on('#cfg-days', 'change', (e) => {
-      setDays(Number(e.target.value));
+    on('#cfg-mix', 'click', (e) => {
+      const b = e.target.closest('button[data-type]');
+      if (!b || b.disabled) return;
+      stepMix(b.dataset.type, Number(b.dataset.d));
     });
 
     const clientLink = $('#client-link');
