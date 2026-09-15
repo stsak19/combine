@@ -1289,6 +1289,41 @@ body.mode-workout {
 
 .mix-row[data-on="true"] .mix-step .mix-n { color: var(--accent); }
 
+#export-btn, #excel-btn { flex: 1; }
+
+.app-note {
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  padding: 12px;
+  margin: 4px 0 14px;
+  display: grid;
+  gap: 8px;
+}
+.app-note[hidden] { display: none; }
+.app-note strong { color: var(--accent); font-size: 15px; }
+.app-note span { font-size: 13px; line-height: 1.45; }
+.app-note code {
+  font-size: 13px;
+  word-break: break-all;
+  padding: 8px;
+  border: 1px solid var(--rule);
+  background: var(--surface-sunk);
+}
+
+.day-pick {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.day-pick .chip {
+  padding: 12px 0;
+  font-family: var(--display);
+  font-size: 20px;
+  text-align: center;
+}
+
 #cfg-preview {
   margin: 14px 0 12px;
   border: 1px solid var(--rule);
@@ -1329,6 +1364,27 @@ body.mode-workout {
 
 /* Η κεφαλίδα του καρνέ ξεκινάει κάτω από το notch. */
 #workout-app .masthead { padding-top: calc(env(safe-area-inset-top) + 18px); }
+
+/* Η αναφορά PDF — φύλλο πάνω από την εφαρμογή. */
+#report-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #ececea;
+}
+@page { size: A4; margin: 15mm 13mm 16mm; }
+@media print {
+  html.report-open, html.report-open body {
+    background: #fff !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  body.report-open > *:not(#report-sheet) { display: none !important; }
+  body.report-open #report-sheet { position: static; overflow: visible; background: #fff; }
+}
 </style>
 <style>
 /* ── Ο διακόπτης ανάμεσα στις δύο εφαρμογές ──────────────────────
@@ -2783,6 +2839,7 @@ function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) 
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -2792,6 +2849,7 @@ function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) 
       if (!error && data) {
         const p = typeof data.primary === "string" ? data.primary : "";
         setPrimary(p);
+        setSaved(p);
         setOpen(!p);
       } else {
         setOpen(true);
@@ -2801,27 +2859,28 @@ function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) 
     return () => { alive = false; };
   }, [session.clientId]);
 
-  /* Ένα πάτημα = αποθήκευση. Οι παλιοί δευτερεύοντες και δικοί στόχοι
-     δεν υπάρχουν πια στην οθόνη, οπότε καθαρίζουν. */
-  const choose = async (k) => {
-    if (saving || k === primary) { setOpen(false); return; }
-    const before = primary;
-    setPrimary(k);
+  /* Το πάτημα μόνο διαλέγει και δείχνει την περιγραφή. Αποθηκεύεται
+     με το κουμπί. Οι παλιοί δευτερεύοντες και δικοί στόχοι δεν υπάρχουν
+     πια στην οθόνη, οπότε καθαρίζουν. */
+  const choose = (k) => { if (!saving) setPrimary(k); };
+
+  const save = async () => {
+    if (!primary || saving) return;
     setSaving(true);
     const { data, error } = await sb.rpc("save_goals", {
       p_client_id: session.clientId,
       p_goals: [],
       p_custom: [],
-      p_primary: k,
+      p_primary: primary,
     });
     setSaving(false);
     if (error || !data || data.ok !== true) {
-      setPrimary(before);
       flash((data && data.error) || "Δεν αποθηκεύτηκε");
       return;
     }
-    const p = typeof data.primary === "string" ? data.primary : k;
+    const p = typeof data.primary === "string" ? data.primary : primary;
     setPrimary(p);
+    setSaved(p);
     setOpen(false);
     if (onGoalsChange) onGoalsChange(!!p);
     flash("Αποθηκεύτηκε");
@@ -2862,39 +2921,43 @@ function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) 
                             on ? "bg-black" : "bg-white"}`}>
                             {on && <span className="h-[7px] w-[7px] rounded-full bg-white" />}
                           </span>
-                          <span className={`f-text text-[14px] leading-snug ${on ? "font-bold" : ""}`}>{g.label}</span>
+                          <span className={`f-text text-[16px] leading-snug ${on ? "font-bold" : ""}`}>{g.label}</span>
                         </button>
                         {on && (
-                          <p className="f-text mb-2 ml-8 text-[12px] leading-relaxed text-neutral-500">{g.desc}</p>
+                          <p className="f-text mb-2 ml-8 text-[14px] leading-relaxed text-neutral-600">{g.desc}</p>
                         )}
                       </div>
                     );
                   })}
                 </div>
-                {primary && (
-                  <Button variant="ghost" className="mt-2 w-full" disabled={saving} onClick={() => setOpen(false)}>
+                <Button size="lg" className="mt-3" disabled={!primary || saving || primary === saved} onClick={save}>
+                  {saving ? "Αποθήκευση…" : primary && primary === saved ? "Αποθηκευμένο" : "Αποθήκευση"}
+                </Button>
+                {saved && (
+                  <Button variant="ghost" className="mt-2 w-full" disabled={saving}
+                    onClick={() => { setPrimary(saved); setOpen(false); }}>
                     Κλείσιμο
                   </Button>
                 )}
               </div>
             ) : (
               <div className="mt-4 flex items-center justify-between gap-3">
-                <span className="f-display border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                <span className="f-display border border-black bg-black px-3 py-2 text-[16px] font-bold uppercase tracking-wide text-white">
                   {PRIMARY_LABELS[primary] || primary}
                 </span>
                 <button type="button" onClick={() => setOpen(true)}
-                  className="f-display text-[11px] font-bold uppercase tracking-wide underline">
+                  className="f-display text-[14px] font-bold uppercase tracking-wide underline">
                   Άλλαξε
                 </button>
               </div>
             )}
 
             <div className="mt-4">
-              <Button size="lg" disabled={!primary || saving} onClick={() => window.openWorkout()}>
+              <Button size="lg" disabled={!saved || saving} onClick={() => window.openWorkout()}>
                 Άνοιγμα προπόνησης
               </Button>
-              {!primary && (
-                <p className="f-text mt-2 text-[12px] text-neutral-500">Διάλεξε πρώτα είδος προπόνησης.</p>
+              {!saved && (
+                <p className="f-text mt-2 text-[13px] text-neutral-500">Διάλεξε και αποθήκευσε πρώτα είδος προπόνησης.</p>
               )}
             </div>
           </>
@@ -4638,6 +4701,12 @@ loadAppSettings().then(() => {
       <p id="storage-mode"></p>
     </div>
 
+    <div class="panel">
+      <h3>Μέρες την εβδομάδα</h3>
+      <p class="hint">Πόσες μέρες θέλεις να γυμνάζεσαι μέσα στην εβδομάδα;</p>
+      <div class="day-pick" id="cfg-days"></div>
+    </div>
+
     <div class="panel" id="config-panel">
       <h3>Η εβδομάδα σου</h3>
       <p class="hint" id="cfg-total"></p>
@@ -4647,8 +4716,17 @@ loadAppSettings().then(() => {
 
     <div class="panel">
       <h3>Τα δεδομένα σου</h3>
-      <button class="btn btn-primary btn-block" id="export-btn">Εξαγωγή σε PDF</button>
-      <p class="hint">Φτιάχνει μια πλήρη αναφορά: δύναμη ανά άσκηση, σωματικό βάρος, όγκο και ολόκληρο το ημερολόγιο. Ανοίγει το παράθυρο εκτύπωσης — διάλεξε <strong>Αποθήκευση ως PDF</strong>. Στο iPhone: Κοινή χρήση → Εκτύπωση → Αποθήκευση σε αρχεία.</p>
+      <div class="app-note" id="export-note" hidden>
+        <strong>Άνοιξε τη σελίδα σε browser</strong>
+        <span>Το PDF και το Excel δεν κατεβαίνουν όταν η εφαρμογή είναι ανοιχτή από την αρχική οθόνη. Άνοιξε το Safari ή το Chrome, μπες στη διεύθυνση από κάτω και κάνε από εκεί την εξαγωγή.</span>
+        <code id="export-url"></code>
+        <button type="button" class="btn btn-quiet btn-block" id="export-copy">Αντιγραφή διεύθυνσης</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="export-btn">PDF</button>
+        <button class="btn btn-quiet" id="excel-btn">Excel</button>
+      </div>
+      <p class="hint">Το <strong>PDF</strong> είναι πλήρης αναφορά: δύναμη ανά άσκηση, σωματικό βάρος, όγκος και ημερολόγιο. Το <strong>Excel</strong> έχει τα ίδια νούμερα σε πίνακες, με κάθε σετ σε δική του γραμμή.</p>
       <div id="data-status"></div>
     </div>
   </main>
@@ -7306,6 +7384,7 @@ function __bootWorkout() {
       const mix = normalizeMix(cfg);
       return JSON.stringify({
         preset: cfg.preset,
+        target: Number(cfg.target) || 0,
         mix: MIX_ORDER.filter((t) => mix[t]).map((t) => [t, mix[t]]),
         emphasis: [...(cfg.emphasis || [])].sort()
       });
@@ -7401,6 +7480,12 @@ function __bootWorkout() {
       renderConfig();
     }
 
+    /* Πόσες μέρες θέλει ο πελάτης. Χωρίς δική του επιλογή, όσες έχει το μείγμα. */
+    function targetDays() {
+      const t = Math.round(Number(state.plan.config.target) || 0);
+      return t >= 2 && t <= 7 ? t : currentDays();
+    }
+
     function renderConfig() {
       const host = $('#config-panel');
       if (!host) return;
@@ -7408,11 +7493,21 @@ function __bootWorkout() {
       const mix = normalizeMix(state.plan.config);
       const total = mixTotal(mix);
       const lifts = liftTotal(mix);
+      const target = targetDays();
+
+      const pick = $('#cfg-days');
+      if (pick) {
+        pick.innerHTML = DAY_CHOICES
+          .map((d) => `<button type="button" class="chip" data-days="${d}" data-on="${d === target}" aria-label="${d} μέρες">${d}</button>`)
+          .join('');
+      }
 
       const totalEl = $('#cfg-total');
       if (totalEl) {
-        totalEl.innerHTML = `<strong>${total} ${total === 1 ? 'μέρα' : 'μέρες'} την εβδομάδα</strong>` +
-          (total >= 7 ? ' · γέμισε η εβδομάδα' : ' · πάτα + για να προσθέσεις μέρα');
+        const left = target - total;
+        totalEl.innerHTML = left > 0
+          ? `<strong>${total} από ${target} μέρες</strong> · μένουν ${left} να μοιράσεις`
+          : `<strong>${total} ${total === 1 ? 'μέρα' : 'μέρες'} την εβδομάδα</strong> · μοιράστηκαν όλες`;
       }
 
       const box = $('#cfg-mix');
@@ -7421,7 +7516,7 @@ function __bootWorkout() {
         const def = SESSION_TYPES[t];
         const n = mix[t] || 0;
         const isLift = def.kind === 'lift';
-        const canAdd = total < 7 && (!isLift || lifts < MAX_LIFT_DAYS);
+        const canAdd = total < target && total < 7 && (!isLift || lifts < MAX_LIFT_DAYS);
         const canRemove = n > 0 && !(isLift && lifts <= 1);
         return `<div class="mix-row" data-on="${n > 0}">` +
           `<div class="mix-text"><strong>${esc(def.label)}</strong><span>${esc(def.hint || '')}</span></div>` +
@@ -7436,6 +7531,18 @@ function __bootWorkout() {
         `<div class="mix-group">Εκτός γυμναστηρίου</div>` + MOVE_ORDER.map(row).join('');
     }
 
+    /* Αλλαγή στον αριθμό ημερών: η εφαρμογή προτείνει ένα μείγμα για
+       τόσες μέρες και ο πελάτης το προσαρμόζει από κάτω. */
+    function chooseDays(n) {
+      const days = Math.min(7, Math.max(2, Math.round(Number(n) || 3)));
+      if (days === targetDays() && mixTotal(normalizeMix(state.plan.config)) === days) return;
+      const c = goalConfig();
+      const mix = autoMix(days, c ? c.cardio : false);
+      const next = { ...state.plan.config, mix, days: mixTotal(mix), target: days, custom: true };
+      delete next.cardio;
+      applyPlanConfig(next);
+    }
+
     /* Ο πελάτης φτιάχνει μόνος του την εβδομάδα: πόσες μέρες από κάθε είδος. */
     function stepMix(type, delta) {
       const mix = normalizeMix(state.plan.config);
@@ -7443,14 +7550,14 @@ function __bootWorkout() {
       if (!def) return;
       const n = (mix[type] || 0) + delta;
       if (delta > 0) {
-        if (mixTotal(mix) >= 7) return;
+        if (mixTotal(mix) >= Math.min(7, targetDays())) return;
         if (def.kind === 'lift' && liftTotal(mix) >= MAX_LIFT_DAYS) return;
       } else {
         if (n < 0) return;
         if (def.kind === 'lift' && liftTotal(mix) <= 1) return;
       }
       if (n > 0) mix[type] = n; else delete mix[type];
-      const next = { ...state.plan.config, mix, days: mixTotal(mix), custom: true };
+      const next = { ...state.plan.config, mix, days: mixTotal(mix), target: targetDays(), custom: true };
       delete next.cardio;
       applyPlanConfig(next);
     }
@@ -7812,6 +7919,33 @@ function __bootWorkout() {
       .ex { color: #3a3a33; }
       .ss { font-variant-numeric: tabular-nums; white-space: nowrap; }
       footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #d8d8d2; font-size: 8.2pt; color: #8a8a80; }
+      @media screen and (max-width: 640px) {
+        body { font-size: 14px; }
+        .page { padding: 18px 14px 28px; }
+        .head { flex-wrap: wrap; }
+        .head h1 { font-size: 24px; }
+        .issued { margin-left: 0; text-align: left; flex-basis: 100%; }
+        .issued b { display: inline; margin-left: 6px; }
+        .boxes { flex-wrap: wrap; }
+        .box { flex: 1 1 40%; margin-right: 0; }
+        .box-n { font-size: 22px; }
+        .box-l { font-size: 12px; }
+        h2 { font-size: 12px; margin-top: 26px; }
+        th { font-size: 10px; padding: 6px 4px; letter-spacing: 0.04em; }
+        td { padding: 8px 4px; font-size: 13px; }
+        td .sub { display: block; font-size: 11.5px; }
+        table { table-layout: auto; }
+        th:last-child, td:last-child { white-space: normal; }
+        td .sub:only-child { display: inline; }
+        .strip { font-size: 13px; }
+        .strip b { font-size: 17px; }
+        .note, .empty { font-size: 12.5px; }
+        .day-head { flex-wrap: wrap; }
+        .day-meta { font-size: 12px; }
+        .line { flex-direction: column; gap: 1px; font-size: 13px; padding: 4px 0; }
+        .ss { white-space: normal; color: #16160f; }
+        footer { font-size: 11.5px; }
+      }
       @media print {
         .bar { display: none; }
         body { background: #fff; font-size: 10pt; }
@@ -7819,10 +7953,6 @@ function __bootWorkout() {
       }
     </style></head>
     <body>
-    <div class="bar">
-      <button type="button" onclick="window.print()">Αποθήκευση ως PDF</button>
-      <span>Στο παράθυρο εκτύπωσης διάλεξε «Αποθήκευση ως PDF». Στο iPhone: Κοινή χρήση → Εκτύπωση → Αποθήκευση σε αρχεία.</span>
-    </div>
     <div class="page">
       <header class="head">
         ${BRAND.logo ? `<img class="mark" src="${esc(BRAND.logo)}" alt="" width="46" height="46">` : MARK_SVG}
@@ -7849,55 +7979,349 @@ function __bootWorkout() {
 
       <footer>${esc(BRAND.name || BRAND_FALLBACK)} — καρνέ προπόνησης. Τα νούμερα είναι όσα κατέγραψες εσύ. Δεν είναι ιατρική συμβουλή.</footer>
     </div>
-    <script>setTimeout(function(){ try { window.focus(); window.print(); } catch (e) {} }, 600);<\/script>
     </body></html>`;
     }
 
-    function printViaFrame(html) {
-      const frame = document.createElement('iframe');
-      frame.setAttribute('aria-hidden', 'true');
-      frame.style.cssText =
-        'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;';
-      document.body.appendChild(frame);
-      const doc = frame.contentDocument;
-      doc.open();
-      doc.write(html);
-      doc.close();
-      setTimeout(() => {
-        try {
-          frame.contentWindow.focus();
-          frame.contentWindow.print();
-        } catch (e) { /* αγνόησε */ }
-        setTimeout(() => frame.remove(), 60000);
-      }, 500);
+    /* Η αναφορά ανοίγει μέσα στην ίδια την εφαρμογή, σε φύλλο πάνω από
+       όλα, με Χ για κλείσιμο. Νέα καρτέλα δεν γίνεται: στο iPhone, όταν η
+       εφαρμογή είναι στην αρχική οθόνη, η καρτέλα ανοίγει χωρίς να μπορεί
+       να τυπώσει και χωρίς τρόπο επιστροφής. Εκτυπώνεται η ίδια η σελίδα,
+       με όλα τα άλλα κρυμμένα. Τα στυλ της αναφοράς μένουν σε shadow DOM
+       για να μην ανακατευτούν με της εφαρμογής. */
+    const SHEET_CSS = `
+      .bar { padding-top: calc(env(safe-area-inset-top) + 10px); }
+      .bar .x {
+        background: transparent; color: #efefef; border: 1px solid #444;
+        width: 44px; height: 44px; padding: 0; font-size: 22px; line-height: 1;
+      }
+      .bar .ghost { background: transparent; color: #efefef; border: 1px solid #444; }
+      .bar .msg { flex-basis: 100%; font-size: 12.5px; color: #bdbdb5; }
+      .bar .warn {
+        flex-basis: 100%; font-size: 13.5px; line-height: 1.45; color: #0a0a0a;
+        background: #e8ff47; padding: 10px 12px; border-radius: 8px;
+      }
+      .bar .warn b { display: block; font-size: 14.5px; }
+    `;
+
+    function reportFileName() {
+      return `${(BRAND.name || BRAND_FALLBACK).replace(/[\\/:*?"<>|]+/g, '').trim() || 'report'} - ${today()}`;
+    }
+
+    function isInstalledApp() {
+      try {
+        return !!(window.navigator.standalone ||
+          (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+      } catch (e) { return false; }
+    }
+
+    function appURL() {
+      return location.origin + location.pathname.replace(/index\.html$/, '');
+    }
+
+    /* ---------- Excel ----------
+       Αληθινό .xlsx χωρίς βιβλιοθήκες: τα φύλλα είναι XML και πακετάρονται
+       σε zip χωρίς συμπίεση. Οι αριθμοί μπαίνουν ως αριθμοί και οι
+       ημερομηνίες ως ημερομηνίες, ώστε να δουλεύουν φίλτρα και γραφήματα. */
+    const CRC_TABLE = (() => {
+      const t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        t[n] = c >>> 0;
+      }
+      return t;
+    })();
+
+    function crc32(bytes) {
+      let c = 0xffffffff;
+      for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    }
+
+    function zipStore(files, type) {
+      const enc = new TextEncoder();
+      const parts = [];
+      const central = [];
+      let offset = 0;
+      files.forEach((f) => {
+        const name = enc.encode(f.name);
+        const data = enc.encode(f.data);
+        const crc = crc32(data);
+        const h = new DataView(new ArrayBuffer(30));
+        h.setUint32(0, 0x04034b50, true);
+        h.setUint16(4, 20, true);
+        h.setUint16(6, 0x0800, true);
+        h.setUint16(12, 0x21, true);
+        h.setUint32(14, crc, true);
+        h.setUint32(18, data.length, true);
+        h.setUint32(22, data.length, true);
+        h.setUint16(26, name.length, true);
+        parts.push(new Uint8Array(h.buffer), name, data);
+        const c = new DataView(new ArrayBuffer(46));
+        c.setUint32(0, 0x02014b50, true);
+        c.setUint16(4, 20, true);
+        c.setUint16(6, 20, true);
+        c.setUint16(8, 0x0800, true);
+        c.setUint16(14, 0x21, true);
+        c.setUint32(16, crc, true);
+        c.setUint32(20, data.length, true);
+        c.setUint32(24, data.length, true);
+        c.setUint16(28, name.length, true);
+        c.setUint32(42, offset, true);
+        central.push(new Uint8Array(c.buffer), name);
+        offset += 30 + name.length + data.length;
+      });
+      const size = central.reduce((a, x) => a + x.length, 0);
+      const e = new DataView(new ArrayBuffer(22));
+      e.setUint32(0, 0x06054b50, true);
+      e.setUint16(8, files.length, true);
+      e.setUint16(10, files.length, true);
+      e.setUint32(12, size, true);
+      e.setUint32(16, offset, true);
+      return new Blob([...parts, ...central, new Uint8Array(e.buffer)], { type });
+    }
+
+    const xmlEsc = (v) => String(v)
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    function colName(i) {
+      let n = i + 1;
+      let out = '';
+      while (n) { const m = (n - 1) % 26; out = String.fromCharCode(65 + m) + out; n = Math.floor((n - 1) / 26); }
+      return out;
+    }
+
+    const excelDate = (iso) => {
+      const [y, m, d] = String(iso).split('-').map(Number);
+      return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000;
+    };
+    const round = (x, dp = 1) => Math.round(Number(x) * 10 ** dp) / 10 ** dp;
+
+    /* rows[0] = επικεφαλίδες. Κελί: κείμενο, αριθμός, { date: 'YYYY-MM-DD' } ή null. */
+    function sheetXML(rows, widths) {
+      const cols = (widths || [])
+        .map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`)
+        .join('');
+      const body = rows.map((row, r) => {
+        const cells = row.map((v, c) => {
+          const ref = colName(c) + (r + 1);
+          if (v === null || v === undefined || v === '') return '';
+          if (r === 0) return `<c r="${ref}" t="inlineStr" s="1"><is><t>${xmlEsc(v)}</t></is></c>`;
+          if (typeof v === 'number' && isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
+          if (v && typeof v === 'object' && v.date) return `<c r="${ref}" s="2"><v>${excelDate(v.date)}</v></c>`;
+          return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+        }).join('');
+        return `<row r="${r + 1}">${cells}</row>`;
+      }).join('');
+      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+        '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+        (cols ? `<cols>${cols}</cols>` : '') +
+        `<sheetData>${body}</sheetData></worksheet>`;
+    }
+
+    function buildXlsx(sheets) {
+      const files = [
+        { name: '[Content_Types].xml', data:
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+          '<Default Extension="xml" ContentType="application/xml"/>' +
+          '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+          '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+          sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
+          '</Types>' },
+        { name: '_rels/.rels', data:
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+          '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+          '</Relationships>' },
+        { name: 'xl/workbook.xml', data:
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+          sheets.map((sh, i) => `<sheet name="${xmlEsc(sh.name.slice(0, 31))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') +
+          '</sheets></workbook>' },
+        { name: 'xl/_rels/workbook.xml.rels', data:
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+          sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') +
+          `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+          '</Relationships>' },
+        { name: 'xl/styles.xml', data:
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+          '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+          '<numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts>' +
+          '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+          '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+          '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+          '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+          '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+          '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+          '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>' +
+          '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+          '</styleSheet>' }
+      ];
+      sheets.forEach((sh, i) => files.push({ name: `xl/worksheets/sheet${i + 1}.xml`, data: sheetXML(sh.rows, sh.widths) }));
+      return zipStore(files, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
+    function excelSheets() {
+      const st = reportStats();
+      const bw = [...state.bodyweight].sort((a, b) => a.date.localeCompare(b.date));
+      const counts = volumeCounts();
+
+      const summary = [
+        ['Στοιχείο', 'Τιμή'],
+        ['Όνομα', BRAND.name || BRAND_FALLBACK],
+        ['Ημερομηνία εξαγωγής', { date: today() }],
+        ['Προπονήσεις', st.sessions.length],
+        ['Σετ', st.totalSets],
+        ['Συνολικός όγκος (kg)', round(st.totalVolume, 0)],
+        ['Πρώτη προπόνηση', st.sessions.length ? { date: st.sessions[0].date } : '—'],
+        ['Τελευταία προπόνηση', st.sessions.length ? { date: st.sessions[st.sessions.length - 1].date } : '—'],
+        ['Τελευταίο βάρος (kg)', bw.length ? round(bw[bw.length - 1].kg) : '—']
+      ];
+
+      const strength = [['Άσκηση', 'Μυϊκή ομάδα', 'Προπονήσεις', 'Σετ', 'Όγκος (kg)', '1RM αρχή (kg)', '1RM τώρα (kg)', 'Μεταβολή (kg)', 'Μέγιστο 1RM (kg)']]
+        .concat(st.exercises.map((e) => {
+          const has = e.peak > 0;
+          const from = e.first ? e.first.value : 0;
+          const to = e.last ? e.last.value : 0;
+          return [e.name, e.group, e.days, e.sets, round(e.volume, 0),
+            has ? round(from) : '—', has ? round(to) : '—', has ? round(to - from) : '—', has ? round(e.peak) : '—'];
+        }));
+
+      const sets = [['Ημερομηνία', 'Προπόνηση', 'Άσκηση', 'Σετ', 'Κιλά', 'Επαναλήψεις', 'Όγκος (kg)']];
+      st.sessions.forEach((s) => {
+        sessionRows(s).forEach((r) => {
+          r.sets.forEach((x, i) => {
+            const w = Number(x.w) || 0;
+            const reps = Number(x.r) || 0;
+            sets.push([{ date: s.date }, dayLabel(s.day), r.name, i + 1, round(w, 2), reps, round(w * reps, 1)]);
+          });
+        });
+      });
+
+      const weight = [['Ημερομηνία', 'Βάρος (kg)', 'Διαφορά (kg)']]
+        .concat(bw.map((r, i) => [{ date: r.date }, round(r.kg), i ? round(r.kg - bw[i - 1].kg) : '—']));
+
+      const volume = [['Μυϊκή ομάδα', 'Σετ 7 ημερών', 'Στόχος']]
+        .concat(WEEKLY_VOLUME.map((v) => [v.group, counts[v.group] || 0, v.target]));
+
+      return [
+        { name: 'Σύνοψη', rows: summary, widths: [26, 28] },
+        { name: 'Δύναμη', rows: strength, widths: [30, 16, 12, 8, 12, 14, 14, 14, 16] },
+        { name: 'Σετ', rows: sets, widths: [13, 18, 30, 6, 9, 12, 12] },
+        { name: 'Σωματικό βάρος', rows: weight, widths: [13, 12, 13] },
+        { name: 'Όγκος εβδομάδας', rows: volume, widths: [18, 14, 12] }
+      ];
+    }
+
+    function downloadExcel(statusEl) {
+      try {
+        const blob = buildXlsx(excelSheets());
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = reportFileName() + '.xlsx';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        const text = isInstalledApp()
+          ? 'Αν δεν κατέβηκε, άνοιξε τη σελίδα σε Safari ή Chrome και ξαναδοκίμασε από εκεί.'
+          : 'Το αρχείο Excel κατέβηκε. Στο iPhone θα το βρεις στα Αρχεία → Λήψεις.';
+        const inBar = !!(statusEl && statusEl.parentNode && statusEl.parentNode.classList && statusEl.parentNode.classList.contains('bar'));
+        if (inBar) { if (!isInstalledApp()) statusEl.textContent = text; }
+        else if (statusEl) setStatus(statusEl, text, true);
+      } catch (e) {
+        const inBar = !!(statusEl && statusEl.parentNode && statusEl.parentNode.classList && statusEl.parentNode.classList.contains('bar'));
+        if (inBar) statusEl.textContent = 'Δεν φτιάχτηκε το αρχείο Excel.';
+        else if (statusEl) setStatus(statusEl, 'Δεν φτιάχτηκε το αρχείο Excel.', false);
+      }
+    }
+
+    function closeReport() {
+      const host = document.getElementById('report-sheet');
+      if (host) host.remove();
+      document.body.classList.remove('report-open');
+      document.documentElement.classList.remove('report-open');
+    }
+
+    function openReport() {
+      closeReport();
+      const html = reportHTML();
+      const parsed = new DOMParser().parseFromString(html, 'text/html');
+      const css = Array.from(parsed.querySelectorAll('style'))
+        .map((x) => x.textContent)
+        .join('\n')
+        .replace(/@page\s*\{[^}]*\}/g, '')
+        .replace(/(^|[\s}])body\s*\{/g, '$1.doc {');
+
+      const host = document.createElement('div');
+      host.id = 'report-sheet';
+      document.body.appendChild(host);
+      const root = host.attachShadow({ mode: 'open' });
+      root.innerHTML =
+        `<style>${css}${SHEET_CSS}</style>` +
+        `<div class="bar">` +
+        `<button type="button" class="x" data-act="close" aria-label="Κλείσιμο">✕</button>` +
+        `<button type="button" data-act="print">Αποθήκευση ως PDF</button>` +
+        `<button type="button" class="ghost" data-act="excel">Excel</button>` +
+        (isInstalledApp()
+          ? `<span class="warn"><b>Άνοιξε τη σελίδα σε browser</b>Από την εφαρμογή στην αρχική οθόνη δεν γίνεται αποθήκευση. Άνοιξε το Safari ή το Chrome στη διεύθυνση ${esc(appURL())} και κάνε από εκεί την εξαγωγή.</span>`
+          : `<span class="msg">Στο παράθυρο εκτύπωσης διάλεξε «Αποθήκευση ως PDF». Στο iPhone: πάτα το εικονίδιο κοινής χρήσης → Αποθήκευση σε Αρχεία.</span>`) +
+        `</div>` +
+        `<div class="doc">${parsed.body.innerHTML}</div>`;
+
+      document.body.classList.add('report-open');
+      document.documentElement.classList.add('report-open');
+      host.scrollTop = 0;
+
+      const msg = root.querySelector('.msg') || root.querySelector('.warn');
+      root.querySelector('.bar').addEventListener('click', async (e) => {
+        const b = e.target.closest('button[data-act]');
+        if (!b) return;
+        const act = b.dataset.act;
+        if (act === 'close') { closeReport(); return; }
+        if (act === 'print') {
+          try { window.print(); } catch (err) {
+            if (!isInstalledApp()) msg.textContent = 'Η εκτύπωση δεν άνοιξε. Άνοιξε τη σελίδα σε Safari ή Chrome και ξαναδοκίμασε.';
+          }
+          return;
+        }
+        if (act === 'excel') downloadExcel(msg);
+      });
     }
 
     $('#export-btn').addEventListener('click', () => {
-      const html = reportHTML();
-      let win = null;
-      try {
-        win = window.open('', '_blank');
-      } catch (e) { /* αγνόησε */ }
-
-      if (win && win.document) {
-        win.document.open();
-        win.document.write(html);
-        win.document.close();
-        setStatus(
-          $('#data-status'),
-          'Η αναφορά άνοιξε σε νέα καρτέλα. Διάλεξε «Αποθήκευση ως PDF» στο παράθυρο εκτύπωσης.',
-          true
-        );
-        return;
-      }
-
-      printViaFrame(html);
-      setStatus(
-        $('#data-status'),
-        'Ανοίγει το παράθυρο εκτύπωσης. Διάλεξε «Αποθήκευση ως PDF».',
-        true
-      );
+      openReport();
+      if ($('#data-status')) $('#data-status').innerHTML = '';
     });
+
+    on('#excel-btn', 'click', () => downloadExcel($('#data-status')));
+
+    /* Όταν η εφαρμογή είναι στην αρχική οθόνη, λέμε από την αρχή ότι η
+       εξαγωγή θέλει browser. */
+    (function exportNote() {
+      const note = $('#export-note');
+      if (!note) return;
+      note.hidden = !isInstalledApp();
+      const u = $('#export-url');
+      if (u) u.textContent = appURL();
+      on('#export-copy', 'click', async () => {
+        const btn = $('#export-copy');
+        try {
+          await navigator.clipboard.writeText(appURL());
+          btn.textContent = 'Αντιγράφηκε ✓';
+        } catch (e) {
+          btn.textContent = 'Κράτα πατημένη τη διεύθυνση για αντιγραφή';
+        }
+        setTimeout(() => { btn.textContent = 'Αντιγραφή διεύθυνσης'; }, 2500);
+      });
+    })();
 
     /* ---------- Ρυθμίσεις: χειριστήρια ---------- */
 
@@ -7908,6 +8332,11 @@ function __bootWorkout() {
       const el = $(sel);
       if (el) el.addEventListener(ev, fn);
     }
+
+    on('#cfg-days', 'click', (e) => {
+      const b = e.target.closest('button[data-days]');
+      if (b) chooseDays(Number(b.dataset.days));
+    });
 
     on('#cfg-mix', 'click', (e) => {
       const b = e.target.closest('button[data-type]');
@@ -8043,6 +8472,13 @@ function __bootWorkout() {
 
   /* Το κουμπί «πίσω» του κινητού κλείνει πρώτα το καρνέ. */
   window.addEventListener("popstate", function () {
+    var sheet = document.getElementById("report-sheet");
+    if (sheet) {
+      sheet.remove();
+      document.body.classList.remove("report-open");
+      document.documentElement.classList.remove("report-open");
+      return;
+    }
     if (document.body.classList.contains("mode-workout")) openClient();
   });
 })();
