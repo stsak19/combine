@@ -2725,7 +2725,7 @@ function QrScanner({ onClose, onFound }) {
 
 /* Όλες οι ρυθμίσεις της συσκευής και του λογαριασμού, από το
    γρανάζι πάνω δεξιά. */
-function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDeleted, onGoalsChange }) {
+function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDeleted, onGoalsChange, workoutOn, setWorkoutOn }) {
   return (
     <div className="h-full overflow-y-auto px-5">
       <h2 className="f-display pt-6 text-[24px] font-extrabold uppercase tracking-tight">Ρυθμίσεις</h2>
@@ -2747,7 +2747,8 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
         </p>
       </div>
 
-      <GoalsPanel session={session} flash={flash} onGoalsChange={onGoalsChange} />
+      <GoalsPanel session={session} flash={flash} onGoalsChange={onGoalsChange}
+        workoutOn={workoutOn} setWorkoutOn={setWorkoutOn} />
 
       <PushPanel session={session} flash={flash} />
 
@@ -2777,13 +2778,9 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
    Διαλέγει όσους θέλει από τη λίστα και γράφει και δικούς του, για
    ό,τι δεν έχουμε προβλέψει. Τα κρατάει η βάση, οπότε τα βλέπει και
    η διαχείριση και το καρνέ προπόνησης — μία πηγή, τρεις οθόνες. */
-function GoalsPanel({ session, flash, onGoalsChange }) {
+function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) {
   const [primary, setPrimary] = useState("");
-  const [picked, setPicked] = useState([]);
-  const [custom, setCustom] = useState([]);
-  const [text, setText] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -2794,135 +2791,72 @@ function GoalsPanel({ session, flash, onGoalsChange }) {
       if (!alive) return;
       if (!error && data) {
         const p = typeof data.primary === "string" ? data.primary : "";
-        const g = (Array.isArray(data.goals) ? data.goals : []).filter((k) => SECONDARY_KEYS.has(k));
-        const c = Array.isArray(data.custom) ? data.custom : [];
         setPrimary(p);
-        setPicked(g);
-        setCustom(c);
-        /* Αν δεν έχει δηλώσει τίποτα, ανοιχτό — για να το δει. Αν έχει,
-           κλειστό: μια γραμμή με τη σύνοψη αρκεί. */
-        setOpen(!p && g.length === 0 && c.length === 0);
-        if (onGoalsChange) onGoalsChange(!!p || g.length > 0 || c.length > 0);
+        setOpen(!p);
+      } else {
+        setOpen(true);
       }
       setLoaded(true);
     })();
     return () => { alive = false; };
   }, [session.clientId]);
 
-  const choosePrimary = (k) => {
-    setPrimary((p) => (p === k ? "" : k));
-    setDirty(true);
-  };
-
-  const toggle = (k) => {
-    setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
-    setDirty(true);
-  };
-
-  const addCustom = () => {
-    const v = text.trim().slice(0, MAX_CUSTOM_GOAL_LEN);
-    if (!v) return;
-    const norm = (s) => s.toLocaleLowerCase("el-GR");
-    if (custom.some((x) => norm(x) === norm(v))) { setText(""); return; }
-    if (custom.length >= MAX_CUSTOM_GOALS) {
-      flash(`Μέχρι ${MAX_CUSTOM_GOALS} δικοί σου στόχοι`);
-      return;
-    }
-    setCustom([...custom, v]);
-    setText("");
-    setDirty(true);
-  };
-
-  const dropCustom = (v) => {
-    setCustom(custom.filter((x) => x !== v));
-    setDirty(true);
-  };
-
-  const save = async () => {
+  /* Ένα πάτημα = αποθήκευση. Οι παλιοί δευτερεύοντες και δικοί στόχοι
+     δεν υπάρχουν πια στην οθόνη, οπότε καθαρίζουν. */
+  const choose = async (k) => {
+    if (saving || k === primary) { setOpen(false); return; }
+    const before = primary;
+    setPrimary(k);
     setSaving(true);
     const { data, error } = await sb.rpc("save_goals", {
       p_client_id: session.clientId,
-      p_goals: picked,
-      p_custom: custom,
-      p_primary: primary || null,
+      p_goals: [],
+      p_custom: [],
+      p_primary: k,
     });
     setSaving(false);
     if (error || !data || data.ok !== true) {
+      setPrimary(before);
       flash((data && data.error) || "Δεν αποθηκεύτηκε");
       return;
     }
-    const p = typeof data.primary === "string" ? data.primary : primary;
-    const g = Array.isArray(data.goals) ? data.goals : picked;
-    const c = Array.isArray(data.custom) ? data.custom : custom;
+    const p = typeof data.primary === "string" ? data.primary : k;
     setPrimary(p);
-    setPicked(g);
-    setCustom(c);
-    setDirty(false);
-    if (onGoalsChange) onGoalsChange(!!p || g.length > 0 || c.length > 0);
-    flash("Οι στόχοι σου αποθηκεύτηκαν");
+    setOpen(false);
+    if (onGoalsChange) onGoalsChange(!!p);
+    flash("Αποθηκεύτηκε");
   };
-
-  const count = (primary ? 1 : 0) + picked.length + custom.length;
 
   return (
     <div className="mt-10 border border-black p-4">
-      <div className="f-display text-[14px] font-bold uppercase tracking-wide">Οι στόχοι μου</div>
-      <p className="f-text mt-2 text-[13px] leading-relaxed text-neutral-600">
-        Διάλεξε πρώτα τον κύριο στόχο σου και μετά ό,τι άλλο θέλεις να
-        δουλέψεις. Τους βλέπει ο γυμναστής σου, και το καρνέ προπόνησης
-        φτιάχνει το πρόγραμμά σου από αυτούς.
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="f-display text-[14px] font-bold uppercase tracking-wide">Πρόγραμμα γυμναστικής</div>
+        <button type="button" role="switch" aria-checked={workoutOn}
+          aria-label="Πρόγραμμα γυμναστικής"
+          onClick={() => setWorkoutOn(!workoutOn)}
+          className={`relative h-7 w-12 shrink-0 rounded-full border border-black transition-colors ${
+            workoutOn ? "bg-black" : "bg-white"}`}>
+          <span className={`absolute top-[3px] h-[20px] w-[20px] rounded-full transition-all ${
+            workoutOn ? "left-[23px] bg-white" : "left-[3px] bg-black"}`} />
+        </button>
+      </div>
 
-      {!loaded ? (
-        <div className="f-text py-6 text-[13px] text-neutral-400">Φόρτωση…</div>
-      ) : (
-        <>
-          {!open ? (
-            <>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {count === 0 ? (
-                  <span className="f-text text-[13px] text-neutral-400">Δεν έχεις δηλώσει στόχους.</span>
-                ) : (
-                  <>
-                    {primary && (
-                      <span className="f-display border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-                        {PRIMARY_LABELS[primary] || primary}
-                      </span>
-                    )}
-                    {picked.map((k) => (
-                      <span key={k} className="f-display border border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
-                        {GOAL_LABELS[k] || k}
-                      </span>
-                    ))}
-                    {custom.map((v) => (
-                      <span key={v} className="f-display border border-dashed border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
-                        {v}
-                      </span>
-                    ))}
-                  </>
-                )}
-              </div>
+      {workoutOn && (
+        !loaded ? (
+          <div className="f-text py-6 text-[13px] text-neutral-400">Φόρτωση…</div>
+        ) : (
+          <>
+            {open ? (
               <div className="mt-4">
-                <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
-                  {count === 0 ? "Διάλεξε στόχους" : "Άλλαξε τους στόχους μου"}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mt-5">
-                <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-                  1 · Ο κύριος στόχος μου
-                </div>
-                <p className="f-text mt-1 text-[12px] leading-relaxed text-neutral-500">
-                  Διάλεξε έναν. Από αυτόν βγαίνει το πρόγραμμα στο καρνέ προπόνησης.
+                <p className="f-text text-[13px] leading-relaxed text-neutral-600">
+                  Διάλεξε το είδος της προπόνησής σου. Από αυτό φτιάχνεται το πρόγραμμά σου.
                 </p>
                 <div className="mt-2 flex flex-col">
                   {PRIMARY_GOALS.map((g) => {
                     const on = primary === g.key;
                     return (
                       <div key={g.key}>
-                        <button onClick={() => choosePrimary(g.key)}
+                        <button type="button" disabled={saving} onClick={() => choose(g.key)}
                           className="flex w-full items-start gap-3 py-2 text-left">
                           <span className={`mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-black ${
                             on ? "bg-black" : "bg-white"}`}>
@@ -2931,104 +2865,40 @@ function GoalsPanel({ session, flash, onGoalsChange }) {
                           <span className={`f-text text-[14px] leading-snug ${on ? "font-bold" : ""}`}>{g.label}</span>
                         </button>
                         {on && (
-                          <p className="f-text mb-2 ml-8 text-[12px] leading-relaxed text-neutral-500">
-                            {g.desc}
-                          </p>
+                          <p className="f-text mb-2 ml-8 text-[12px] leading-relaxed text-neutral-500">{g.desc}</p>
                         )}
                       </div>
                     );
                   })}
                 </div>
+                {primary && (
+                  <Button variant="ghost" className="mt-2 w-full" disabled={saving} onClick={() => setOpen(false)}>
+                    Κλείσιμο
+                  </Button>
+                )}
               </div>
+            ) : (
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <span className="f-display border border-black bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                  {PRIMARY_LABELS[primary] || primary}
+                </span>
+                <button type="button" onClick={() => setOpen(true)}
+                  className="f-display text-[11px] font-bold uppercase tracking-wide underline">
+                  Άλλαξε
+                </button>
+              </div>
+            )}
 
-              {!primary ? (
-                <p className="f-text mt-6 border-t border-neutral-200 pt-5 text-[13px] leading-relaxed text-neutral-500">
-                  Διάλεξε πρώτα κύριο στόχο. Μετά μπορείς να προσθέσεις κι άλλα
-                  που θέλεις να δουλέψεις.
-                </p>
-              ) : (
-                <>
-                  <div className="mt-6 border-t border-neutral-200 pt-5">
-                    <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-                      2 · Τι άλλο θέλω να δουλέψω
-                    </div>
-                    <p className="f-text mt-1 text-[12px] leading-relaxed text-neutral-500">
-                      Προαιρετικά. Διάλεξε όσα θέλεις.
-                    </p>
-                  </div>
-
-                  {GOAL_GROUPS.map((g) => (
-                    <div key={g.title} className="mt-5">
-                      <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-                        {g.title}
-                      </div>
-                      <div className="mt-2 flex flex-col">
-                        {g.keys.map((k) => {
-                          const on = picked.includes(k);
-                          return (
-                            <button key={k} onClick={() => toggle(k)}
-                              className="flex items-start gap-3 py-2 text-left">
-                              <span className={`mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center border border-black ${
-                                on ? "bg-black" : "bg-white"}`}>
-                                {on && <span className="f-display text-[13px] font-bold leading-none text-white">✓</span>}
-                              </span>
-                              <span className="f-text text-[14px] leading-snug">{GOAL_LABELS[k]}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="mt-6 border-t border-neutral-200 pt-5">
-                    <div className="f-display text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400">
-                      Ο δικός σου στόχος
-                    </div>
-                    <p className="f-text mt-1 text-[12px] leading-relaxed text-neutral-500">
-                      Γράψε ό,τι θέλεις με δικά σου λόγια. Μέχρι {MAX_CUSTOM_GOALS}. Τον
-                      βλέπει ο γυμναστής σου — το πρόγραμμα δεν αλλάζει από αυτόν.
-                    </p>
-
-                    {custom.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {custom.map((v) => (
-                          <span key={v}
-                            className="f-display flex items-center gap-2 border border-dashed border-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
-                            {v}
-                            <button onClick={() => dropCustom(v)} aria-label="Αφαίρεση"
-                              className="text-[13px] leading-none">×</button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-3 flex gap-2">
-                      <input value={text} onChange={(e) => setText(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") addCustom(); }}
-                        maxLength={MAX_CUSTOM_GOAL_LEN}
-                        placeholder="π.χ. να ανεβαίνω σκάλες χωρίς λαχάνιασμα"
-                        className="f-text min-w-0 flex-1 border border-black px-3 py-2 text-[14px] outline-none" />
-                      <Button size="md" variant="outline" disabled={!text.trim() || custom.length >= MAX_CUSTOM_GOALS}
-                        onClick={addCustom}>
-                        Πρόσθεσε
-                      </Button>
-                    </div>
-                  </div>
-                </>
+            <div className="mt-4">
+              <Button size="lg" disabled={!primary || saving} onClick={() => window.openWorkout()}>
+                Άνοιγμα προπόνησης
+              </Button>
+              {!primary && (
+                <p className="f-text mt-2 text-[12px] text-neutral-500">Διάλεξε πρώτα είδος προπόνησης.</p>
               )}
-
-              <div className="mt-5">
-                <Button size="lg" disabled={saving || !dirty} onClick={save}>
-                  {saving ? "Αποθήκευση…" : dirty ? "Αποθήκευση" : "Αποθηκευμένο"}
-                </Button>
-                <Button variant="ghost" className="mt-2 w-full" disabled={saving}
-                  onClick={() => setOpen(false)}>
-                  Κλείσιμο
-                </Button>
-              </div>
-            </>
-          )}
-        </>
+            </div>
+          </>
+        )
       )}
     </div>
   );
@@ -3276,6 +3146,19 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
   /* Το καρνέ προπόνησης μένει κρυφό μέχρι ο πελάτης να δηλώσει
      στόχους. Χωρίς στόχους δεν υπάρχει πρόγραμμα να δει. */
   const [hasGoals, setHasGoals] = useState(false);
+  /* Ο διακόπτης «Πρόγραμμα γυμναστικής» στις Ρυθμίσεις. Κρατιέται στη
+     συσκευή. Όσοι δεν τον έχουν πειράξει ποτέ, τον βλέπουν ανοιχτό αν
+     έχουν ήδη στόχο — για να μη χάσουν τον κεραυνό. */
+  const workoutKey = "pb3_workout_on_" + session.clientId;
+  const [workoutPref, setWorkoutPref] = useState(() => {
+    try { const v = localStorage.getItem(workoutKey); return v === null ? null : v === "1"; }
+    catch (e) { return null; }
+  });
+  const workoutOn = workoutPref === null ? hasGoals : workoutPref;
+  const setWorkoutOn = (v) => {
+    setWorkoutPref(v);
+    try { localStorage.setItem(workoutKey, v ? "1" : "0"); } catch (e) { /* ignore */ }
+  };
   const [scanOpen, setScanOpen] = useState(false);
   /* Μία ερώτηση με το άνοιγμα: έχει δηλώσει στόχους ή όχι. Από αυτό
      κρίνεται αν φαίνεται ο κεραυνός. */
@@ -3287,7 +3170,7 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
       const p = typeof data.primary === "string" ? data.primary : "";
       const g = Array.isArray(data.goals) ? data.goals : [];
       const c = Array.isArray(data.custom) ? data.custom : [];
-      setHasGoals(!!p || g.length > 0 || c.length > 0);
+      setHasGoals(!!p);
     })();
     return () => { alive = false; };
   }, [session.clientId]);
@@ -3491,7 +3374,7 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {hasGoals && (
+          {hasGoals && workoutOn && (
             <button type="button" onClick={() => window.openWorkout()}
               aria-label="Άνοιγμα προπόνησης" title="Προπόνηση"
               className="bolt-btn flex h-11 w-11 shrink-0 items-center justify-center border border-black bg-black">
@@ -3567,7 +3450,7 @@ function ClientApp({ session, onLogout, onAccountGone, justSignedUp, clearSigned
         {settingsOpen ? (
           <SettingsTab session={session} flash={flash} theme={theme} setTheme={setTheme}
             onLogout={onLogout} onAccountDeleted={() => onAccountGone("self")}
-            onGoalsChange={setHasGoals} />
+            onGoalsChange={setHasGoals} workoutOn={workoutOn} setWorkoutOn={setWorkoutOn} />
         ) : (
           <React.Fragment>
             {tab === "book" && <BookTab session={session} flash={flash} credits={credits} hasAhead={hasAhead} onMine={reportMine} />}
