@@ -943,6 +943,7 @@ body.mode-workout {
 
 .field input[type='number'],
 .field input[type='text'],
+.field input[type='date'],
 .field select {
   width: 100%;
   min-height: var(--tap);
@@ -1104,6 +1105,115 @@ body.mode-workout {
 .history-item:last-child { border-bottom: none; }
 
 .history-item .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+button.history-item {
+  width: 100%;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  align-items: center;
+}
+button.history-item:active { background: var(--accent-soft); }
+.history-item .go { color: var(--accent); font-size: 18px; line-height: 1; margin-left: 4px; }
+.history-more { margin-top: 8px; }
+
+/* ---------- Επεξεργασία παλιάς προπόνησης ---------- */
+
+.hx-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+}
+.hx-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 10px) 16px 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.hx-bar strong { font-family: var(--display); font-size: 19px; }
+.hx-x {
+  width: var(--tap);
+  height: var(--tap);
+  flex: 0 0 auto;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 20px;
+}
+.hx-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 16px 24px;
+}
+.hx-top { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hx-top input[type='date'] { -webkit-appearance: none; appearance: none; font: inherit; font-size: 15px; color-scheme: dark; }
+.hx-done {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 4px;
+  font-size: 15px;
+}
+.hx-done input { width: 22px; height: 22px; accent-color: var(--accent); }
+.hx-ex { border-top: 1px solid var(--rule); padding: 14px 0 6px; }
+.hx-name { font-weight: 600; font-size: 15px; margin-bottom: 8px; }
+.hx-set {
+  display: grid;
+  grid-template-columns: 22px 1fr auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.hx-set .n { color: var(--muted); font-size: 13px; text-align: center; }
+.hx-set .u { color: var(--muted); font-size: 13px; }
+.hx-set input {
+  min-width: 0;
+  width: 100%;
+  padding: 10px 6px;
+  text-align: center;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--surface-sunk);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+.hx-set input:focus { outline: none; border-color: var(--accent-line); }
+.hx-del {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+}
+.hx-add {
+  background: transparent;
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  color: var(--accent);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 14px;
+}
+.hx-actions {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
+  border-top: 1px solid var(--rule);
+  background: var(--surface);
+}
 
 /* ---------- Ευρεία οθόνη ---------- */
 
@@ -5831,31 +5941,103 @@ function __bootWorkout() {
       });
     }
 
+    /* ---------- Τι μένει να ανέβει ----------
+       Κρατάμε στη συσκευή ποιες γραμμές άλλαξαν (id → updated_at) και
+       ποιες σβήστηκαν. Ανεβαίνουν μόνο αυτές, όχι όλο το ιστορικό κάθε
+       φορά. Μια γραμμή που λείπει από το cloud και δεν περιμένει ανέβασμα
+       σημαίνει ότι σβήστηκε από άλλη συσκευή. */
+    const META_KEY = '__sync';
+
+    function emptyMeta() {
+      return { v: 1, dirty: {}, deleted: {}, single: {} };
+    }
+
+    function readMeta() {
+      const m = read(META_KEY, null);
+      if (m && m.v === 1) {
+        m.dirty = m.dirty || {};
+        m.deleted = m.deleted || {};
+        m.single = m.single || {};
+        return m;
+      }
+      /* Πρώτη φορά με αυτή την έκδοση: ό,τι υπάρχει στη συσκευή δεν έχει
+         ανέβει ποτέ (ο παλιός συγχρονισμός απορριπτόταν), οπότε μπαίνουν
+         όλα στην ουρά. Στο πρώτο κατέβασμα κερδίζει ό,τι είναι νεότερο. */
+      const fresh = emptyMeta();
+      Object.keys(TABLES).forEach((key) => {
+        fresh.dirty[key] = {};
+        (read(key, []) || []).filter((r) => r && r.id).forEach((r) => {
+          fresh.dirty[key][r.id] = r.updated_at || '';
+        });
+      });
+      Object.keys(SINGLE).forEach((key) => {
+        const v = read(key, null);
+        if (v) fresh.single[key] = v.updated_at || '';
+      });
+      writeRaw(META_KEY, fresh);
+      return fresh;
+    }
+
+    const saveMeta = (m) => writeRaw(META_KEY, m);
+
+    function markDirty(key, prevRows, nextValue) {
+      const meta = readMeta();
+      if (SINGLE[key]) {
+        if (nextValue && (!prevRows || prevRows.updated_at !== nextValue.updated_at)) {
+          meta.single[key] = nextValue.updated_at;
+        }
+        saveMeta(meta);
+        return;
+      }
+      if (!TABLES[key] || !Array.isArray(nextValue)) return;
+      const dirty = (meta.dirty[key] = meta.dirty[key] || {});
+      const deleted = new Set(meta.deleted[key] || []);
+      const prev = new Map((prevRows || []).filter(Boolean).map((r) => [r.id, r]));
+      const seen = new Set();
+      nextValue.forEach((row) => {
+        if (!row || !row.id) return;
+        seen.add(row.id);
+        deleted.delete(row.id);
+        const old = prev.get(row.id);
+        if (!old || old.updated_at !== row.updated_at) dirty[row.id] = row.updated_at;
+      });
+      prev.forEach((_, id) => {
+        if (seen.has(id)) return;
+        delete dirty[id];
+        deleted.add(id);
+      });
+      meta.deleted[key] = [...deleted];
+      saveMeta(meta);
+    }
+
     function write(key, value) {
-      writeRaw(key, stamp(key, value));
+      const prev = SINGLE[key] ? read(key, null) : TABLES[key] ? read(key, []) : null;
+      const stamped = stamp(key, value);
+      writeRaw(key, stamped);
+      if (SINGLE[key] || TABLES[key]) markDirty(key, prev, stamped);
       queuePush(key);
       return value;
     }
 
     async function clearAll() {
-      ['sessions', 'bodyweight', 'measurements', 'profile', 'plan', 'settings'].forEach((k) => {
+      ['sessions', 'bodyweight', 'measurements', 'profile', 'plan', 'settings', META_KEY].forEach((k) => {
         const full = PREFIX + k;
         try {
           if (hasLocal) window.localStorage.removeItem(full);
         } catch { /* αγνόησε */ }
         memory.delete(full);
       });
+      saveMeta(emptyMeta());
+      pending.clear();
       /* Αλλιώς ο επόμενος συγχρονισμός θα τα κατέβαζε πάλι όλα.
-         Σβήνουμε ΜΟΝΟ τις δικές μας γραμμές — παλιά έφευγε όλος ο
-         πίνακας, δηλαδή και των υπόλοιπων πελατών. */
+         Σβήνουμε ΜΟΝΟ τις γραμμές του συγκεκριμένου πελάτη. */
       const uid = currentUser();
       if (!uid) { emit('ok'); return; }
       try {
         const sb = await getClient();
-        for (const table of Object.values(TABLES)) {
-          await sb.from(table).delete().eq('user_id', uid);
-        }
-        await sb.from(PROFILE_TABLE).delete().eq('user_id', uid);
+        const { data, error } = await sb.rpc('lean_clear', { p_client_id: uid });
+        if (error) throw new Error(error.message);
+        if (!data || data.ok !== true) throw new Error((data && data.error) || 'Δεν σβήστηκαν τα δεδομένα');
         emit('ok');
       } catch (err) {
         emit('error', message(err));
@@ -5921,33 +6103,73 @@ function __bootWorkout() {
       return clientPromise;
     }
 
-    /* ---------- Ανέβασμα ---------- */
+    /* ---------- Ανέβασμα ----------
+       Οι πίνακες lean_* είναι κλειστοί για απευθείας πρόσβαση. Όλα περνάνε
+       από τις συναρτήσεις lean_push / lean_pull, με τον ίδιο τρόπο που οι
+       κρατήσεις περνάνε από τις δικές τους. */
 
-    function rowsFor(key) {
-      return (read(key, []) || []).filter((r) => r && UUID_RE.test(String(r.id)));
+    /* Προπόνηση χωρίς κανένα σετ και όχι ολοκληρωμένη = τίποτα να κρατηθεί.
+       Μια ολοκληρωμένη μέρα περπατήματος δεν έχει σετ, αλλά μετράει. */
+    function isEmptySession(row) {
+      if (!row || row.done) return false;
+      return !Object.values(row.entries || {}).some((sets) => Array.isArray(sets) && sets.some(Boolean));
     }
 
-    async function pushKey(sb, key, uid) {
+    async function pushAll(sb, uid) {
       if (!uid) return;
-      if (SINGLE[key]) {
-        const p = read(key, null);
-        if (!p) return;
-        const { updated_at, ...data } = p;
-        const { error } = await sb
-          .from(PROFILE_TABLE)
-          .upsert({
-            id: singleId(key, uid),
-            user_id: uid,
-            data,
-            updated_at: updated_at || new Date().toISOString(),
-          }, { onConflict: 'id' });
-        if (error) throw new Error(error.message);
-        return;
-      }
-      const rows = rowsFor(key).map((r) => ({ ...r, user_id: uid }));
-      if (!rows.length) return;
-      const { error } = await sb.from(TABLES[key]).upsert(rows, { onConflict: 'id' });
+      const meta = readMeta();
+      const payload = { deleted: {} };
+      const sentRows = {};
+      let work = false;
+
+      Object.keys(TABLES).forEach((key) => {
+        const rows = new Map((read(key, []) || []).filter((r) => r && UUID_RE.test(String(r.id))).map((r) => [r.id, r]));
+        const dirty = meta.dirty[key] || {};
+        const send = [];
+        const del = (meta.deleted[key] || []).filter((id) => UUID_RE.test(String(id)));
+        Object.keys(dirty).forEach((id) => {
+          const row = rows.get(id);
+          if (!row) { delete dirty[id]; return; }
+          if (key === 'sessions' && isEmptySession(row)) del.push(id);
+          else send.push(row);
+        });
+        payload[key] = send;
+        payload.deleted[key] = del;
+        sentRows[key] = Object.fromEntries(Object.keys(dirty).map((id) => [id, dirty[id]]));
+        if (send.length || del.length) work = true;
+      });
+
+      const sentSingle = {};
+      Object.keys(SINGLE).forEach((key) => {
+        if (!meta.single[key]) return;
+        const v = read(key, null);
+        if (!v) { delete meta.single[key]; return; }
+        payload[key] = v;
+        sentSingle[key] = meta.single[key];
+        work = true;
+      });
+
+      saveMeta(meta);
+      if (!work) return;
+
+      const { data, error } = await sb.rpc('lean_push', { p_client_id: uid, p_payload: payload });
       if (error) throw new Error(error.message);
+      if (!data || data.ok !== true) throw new Error((data && data.error) || 'Δεν ανέβηκαν τα δεδομένα');
+
+      /* Βγάζουμε από την ουρά μόνο ό,τι δεν ξανάλλαξε όσο γινόταν το ανέβασμα. */
+      const after = readMeta();
+      Object.keys(TABLES).forEach((key) => {
+        const dirty = after.dirty[key] || {};
+        Object.entries(sentRows[key] || {}).forEach(([id, ts]) => {
+          if (dirty[id] === ts) delete dirty[id];
+        });
+        const sentDel = new Set(payload.deleted[key] || []);
+        after.deleted[key] = (after.deleted[key] || []).filter((id) => !sentDel.has(id));
+      });
+      Object.entries(sentSingle).forEach(([key, ts]) => {
+        if (after.single[key] === ts) delete after.single[key];
+      });
+      saveMeta(after);
     }
 
     function queuePush(key) {
@@ -5968,7 +6190,7 @@ function __bootWorkout() {
       emit('syncing');
       try {
         const sb = await getClient();
-        for (const key of keys) await pushKey(sb, key, uid);
+        await pushAll(sb, uid);
         keys.forEach((k) => pending.delete(k));
         emit('ok');
       } catch (err) {
@@ -5989,53 +6211,76 @@ function __bootWorkout() {
         rest.shoulders = Number(rest.shoulders);
         rest.waist = Number(rest.waist);
       }
+      if (key === 'sessions' && (!rest.entries || Array.isArray(rest.entries))) rest.entries = {};
       return rest;
     }
 
-    function merge(key, local, remote) {
-      const map = new Map();
-      (local || []).filter(Boolean).forEach((r) => map.set(r.id, r));
-      let changed = false;
+    function merge(key, local, remote, meta) {
+      const dirty = meta.dirty[key] || (meta.dirty[key] = {});
+      const deleted = new Set(meta.deleted[key] || []);
+      const remoteMap = new Map();
       (remote || []).filter(Boolean).forEach((raw) => {
         const row = clean(key, raw);
-        const mine = map.get(row.id);
-        if (!mine || stampOf(row) > stampOf(mine)) {
-          map.set(row.id, row);
-          changed = true;
-        }
+        if (!deleted.has(row.id)) remoteMap.set(row.id, row);
       });
-      return { rows: [...map.values()], changed };
+
+      let changed = false;
+      const out = [];
+      (local || []).filter(Boolean).forEach((mine) => {
+        const theirs = remoteMap.get(mine.id);
+        remoteMap.delete(mine.id);
+        if (theirs) {
+          if (stampOf(theirs) > stampOf(mine)) {
+            out.push(theirs);
+            delete dirty[mine.id];
+            changed = true;
+          } else {
+            out.push(mine);
+          }
+          return;
+        }
+        /* Λείπει από το cloud: αν περιμένει ανέβασμα, μένει. Αλλιώς
+           σβήστηκε από άλλη συσκευή. */
+        if (mine.id in dirty || !UUID_RE.test(String(mine.id))) out.push(mine);
+        else changed = true;
+      });
+      remoteMap.forEach((row) => {
+        out.push(row);
+        changed = true;
+      });
+      return { rows: out, changed };
     }
 
     async function pullAll(sb, uid) {
       if (!uid) return false;
+      const { data, error } = await sb.rpc('lean_pull', { p_client_id: uid });
+      if (error) throw new Error(error.message);
+      if (!data || data.ok !== true) throw new Error((data && data.error) || 'Δεν κατέβηκαν τα δεδομένα');
+
+      const meta = readMeta();
       let changed = false;
 
-      for (const [key, table] of Object.entries(TABLES)) {
-        const { data, error } = await sb.from(table).select('*').eq('user_id', uid);
-        if (error) throw new Error(error.message);
-        const result = merge(key, read(key, []), data);
+      for (const key of Object.keys(TABLES)) {
+        const result = merge(key, read(key, []), Array.isArray(data[key]) ? data[key] : [], meta);
         if (result.changed) {
           writeRaw(key, result.rows);
           changed = true;
         }
       }
 
-      const { data, error } = await sb.from(PROFILE_TABLE).select('*').eq('user_id', uid);
-      if (error) throw new Error(error.message);
-      const byId = new Map((data || []).filter(Boolean).map((r) => [r.id, r]));
-
       for (const key of Object.keys(SINGLE)) {
-        const row = byId.get(singleId(key, uid));
+        const row = data[key];
         if (!row || !row.data) continue;
         const remote = { ...row.data, updated_at: row.updated_at };
         const mine = read(key, null);
         if (!mine || stampOf(remote) > stampOf(mine)) {
           writeRaw(key, remote);
+          delete meta.single[key];
           changed = true;
         }
       }
 
+      saveMeta(meta);
       return changed;
     }
 
@@ -6050,7 +6295,7 @@ function __bootWorkout() {
       try {
         const sb = await getClient();
         changed = await pullAll(sb, uid);
-        for (const key of SYNCED) await pushKey(sb, key, uid);
+        await pushAll(sb, uid);
         pending.clear();
         emit('ok');
         if (changed) window.dispatchEvent(new CustomEvent('lean:data'));
@@ -7233,27 +7478,256 @@ function __bootWorkout() {
       host.appendChild(caption);
     }
 
+    let historyAll = false;
+
     function renderHistory() {
       const host = $('#history-list');
       host.innerHTML = '';
-      const rows = sortedSessions().slice(-12).reverse();
+      const sorted = sortedSessions();
+      const rows = (historyAll ? sorted : sorted.slice(-12)).reverse();
       if (!rows.length) {
         host.innerHTML = '<div class="empty">Δεν υπάρχει ακόμη ιστορικό.</div>';
         return;
       }
       rows.forEach((s) => {
-        const setCount = Object.values(s.entries).reduce((a, x) => a + x.filter(Boolean).length, 0);
-        const volume = Object.entries(s.entries).reduce(
-          (a, [, sets]) => a + sets.filter(Boolean).reduce((b, x) => b + x.w * x.r, 0),
+        const setCount = Object.values(s.entries || {}).reduce((a, x) => a + (x || []).filter(Boolean).length, 0);
+        const volume = Object.entries(s.entries || {}).reduce(
+          (a, [, sets]) => a + (sets || []).filter(Boolean).reduce((b, x) => b + x.w * x.r, 0),
           0
         );
-        const item = document.createElement('div');
+        const item = document.createElement('button');
+        item.type = 'button';
         item.className = 'history-item';
+        item.setAttribute('aria-label', `Επεξεργασία: ${dayLabel(s.day)}, ${shortDate(s.date)}`);
         item.innerHTML =
-          `<span>${dayLabel(s.day)} · ${setCount} σετ${s.done ? '' : ' (ανοιχτή)'}</span>` +
-          `<span class="when">${shortDate(s.date)} · ${num(volume, 0)} kg</span>`;
+          `<span>${esc(dayLabel(s.day))} · ${setCount} σετ${s.done ? '' : ' (ανοιχτή)'}</span>` +
+          `<span class="when">${shortDate(s.date)} · ${num(volume, 0)} kg<span class="go" aria-hidden="true"> ›</span></span>`;
+        item.addEventListener('click', () => openSessionEditor(s.id));
         host.appendChild(item);
       });
+      if (sorted.length > 12) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'btn btn-quiet btn-block history-more';
+        more.textContent = historyAll ? 'Δείξε λιγότερες' : `Δείξε όλες (${sorted.length})`;
+        more.addEventListener('click', () => { historyAll = !historyAll; renderHistory(); });
+        host.appendChild(more);
+      }
+    }
+
+    /* ---------- Επεξεργασία παλιάς προπόνησης ----------
+       Διορθώνεις κιλά/επαναλήψεις, προσθέτεις ή σβήνεις σετ, αλλάζεις
+       ημερομηνία, ή σβήνεις ολόκληρη την προπόνηση. Τίποτα δεν αλλάζει
+       μέχρι να πατήσεις Αποθήκευση. */
+
+    function exerciseForId(id) {
+      return exById(id) || everyExercise().find((e) => (ALIASES[e.id] || []).includes(id)) || null;
+    }
+
+    function closeSessionEditor() {
+      const el = document.getElementById('hx-sheet');
+      if (el) el.remove();
+    }
+
+    function openSessionEditor(sessionId) {
+      const session = state.sessions.find((x) => x.id === sessionId);
+      if (!session) return;
+      closeSessionEditor();
+
+      /* Πρόχειρο αντίγραφο — η αληθινή προπόνηση μένει ανέγγιχτη. */
+      const draft = {
+        date: session.date,
+        day: session.day,
+        done: !!session.done,
+        entries: {}
+      };
+      Object.entries(session.entries || {}).forEach(([id, sets]) => {
+        const list = (sets || []).filter(Boolean).map((x) => ({ w: x.w, r: x.r }));
+        if (list.length) draft.entries[id] = list;
+      });
+
+      const root = document.getElementById('workout-app') || document.body;
+      const sheet = document.createElement('div');
+      sheet.id = 'hx-sheet';
+      sheet.className = 'hx-sheet';
+      sheet.setAttribute('role', 'dialog');
+      sheet.setAttribute('aria-modal', 'true');
+      root.appendChild(sheet);
+
+      const dayOptions = () => {
+        const keys = [...DAY_ORDER];
+        if (!keys.includes(draft.day)) keys.push(draft.day);
+        return keys.map((d) => `<option value="${esc(d)}"${d === draft.day ? ' selected' : ''}>${esc(dayLabel(d))}</option>`).join('');
+      };
+
+      /* Διαβάζει ό,τι γράφτηκε στα πεδία πριν ξαναζωγραφίσουμε. */
+      function collect() {
+        const out = {};
+        $$('.hx-ex', sheet).forEach((box) => {
+          const id = box.dataset.ex;
+          const list = [];
+          $$('.hx-set', box).forEach((row) => {
+            const w = Number(String($('[data-w]', row).value).replace(',', '.'));
+            const r = Number($('[data-r]', row).value);
+            list.push({ w: Number.isFinite(w) ? w : NaN, r: Number.isFinite(r) ? r : NaN });
+          });
+          out[id] = list;
+        });
+        draft.entries = out;
+        const d = $('#hx-date', sheet);
+        if (d && d.value) draft.date = d.value;
+        const done = $('#hx-done', sheet);
+        if (done) draft.done = done.checked;
+      }
+
+      function paint() {
+        const ids = Object.keys(draft.entries);
+        const order = dayExercises(draft.day, true).map((e) => e.id);
+        ids.sort((a, b) => {
+          const ia = order.indexOf(a) < 0 ? 99 : order.indexOf(a);
+          const ib = order.indexOf(b) < 0 ? 99 : order.indexOf(b);
+          return ia - ib;
+        });
+        const addable = dayExercises(draft.day).filter((e) => !ids.includes(e.id));
+
+        const exHTML = ids.map((id) => {
+          const ex = exerciseForId(id);
+          const name = ex ? ex.name : 'Άσκηση εκτός προγράμματος';
+          const sets = draft.entries[id];
+          return `<div class="hx-ex" data-ex="${esc(id)}">` +
+            `<div class="hx-name">${esc(name)}</div>` +
+            sets.map((x, i) => `<div class="hx-set">` +
+              `<span class="n">${i + 1}</span>` +
+              `<input data-w type="number" inputmode="decimal" min="0" step="0.5" value="${Number.isFinite(x.w) ? x.w : ''}" aria-label="Κιλά σετ ${i + 1}">` +
+              `<span class="u">kg ×</span>` +
+              `<input data-r type="number" inputmode="numeric" min="1" step="1" value="${Number.isFinite(x.r) ? x.r : ''}" aria-label="Επαναλήψεις σετ ${i + 1}">` +
+              `<button type="button" class="hx-del" data-del="${i}" aria-label="Σβήσε σετ ${i + 1}">✕</button>` +
+              `</div>`).join('') +
+            `<button type="button" class="hx-add" data-add>+ σετ</button>` +
+            `</div>`;
+        }).join('');
+
+        sheet.innerHTML =
+          `<div class="hx-bar">` +
+          `<button type="button" class="hx-x" data-close aria-label="Κλείσιμο χωρίς αλλαγές">✕</button>` +
+          `<strong>Επεξεργασία προπόνησης</strong>` +
+          `</div>` +
+          `<div class="hx-body">` +
+          `<div class="hx-top">` +
+          `<div class="field"><label for="hx-date">Ημερομηνία</label><input id="hx-date" type="date" max="${today()}" value="${esc(draft.date)}"></div>` +
+          `<div class="field"><label for="hx-day">Προπόνηση</label><select id="hx-day">${dayOptions()}</select></div>` +
+          `</div>` +
+          `<label class="hx-done"><input id="hx-done" type="checkbox"${draft.done ? ' checked' : ''}> Ολοκληρωμένη</label>` +
+          (exHTML || '<p class="hint">Δεν υπάρχουν σετ σε αυτή την προπόνηση.</p>') +
+          (addable.length
+            ? `<div class="field" style="margin-top:14px"><label for="hx-new">Πρόσθεσε άσκηση</label>` +
+              `<select id="hx-new"><option value="">Διάλεξε…</option>` +
+              addable.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('') +
+              `</select></div>`
+            : '') +
+          `<div id="hx-status"></div>` +
+          `</div>` +
+          `<div class="hx-actions">` +
+          `<button type="button" class="btn btn-primary btn-block" data-save>Αποθήκευση</button>` +
+          `<button type="button" class="btn btn-danger btn-block" data-remove>Διαγραφή προπόνησης</button>` +
+          `</div>`;
+      }
+
+      function fail(text) {
+        const host = $('#hx-status', sheet);
+        if (host) setStatus(host, text, false);
+      }
+
+      function removeSession() {
+        state.sessions = state.sessions.filter((x) => x.id !== session.id);
+        save('sessions');
+        closeSessionEditor();
+        renderAll();
+      }
+
+      sheet.addEventListener('click', (e) => {
+        const t = e.target;
+        if (t.closest('[data-close]')) { closeSessionEditor(); return; }
+
+        const del = t.closest('[data-del]');
+        if (del) {
+          collect();
+          const id = del.closest('.hx-ex').dataset.ex;
+          draft.entries[id].splice(Number(del.dataset.del), 1);
+          if (!draft.entries[id].length) delete draft.entries[id];
+          paint();
+          return;
+        }
+
+        if (t.closest('[data-add]')) {
+          collect();
+          const id = t.closest('.hx-ex').dataset.ex;
+          const list = draft.entries[id];
+          const last = list[list.length - 1] || { w: 0, r: 8 };
+          list.push({ w: last.w, r: last.r });
+          paint();
+          return;
+        }
+
+        if (t.closest('[data-remove]')) {
+          if (confirm(`Να διαγραφεί οριστικά η προπόνηση «${dayLabel(session.day)}» της ${shortDate(session.date)};`)) {
+            removeSession();
+          }
+          return;
+        }
+
+        if (t.closest('[data-save]')) {
+          collect();
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) { fail('Διάλεξε ημερομηνία.'); return; }
+          if (draft.date > today()) { fail('Η ημερομηνία δεν μπορεί να είναι στο μέλλον.'); return; }
+
+          const entries = {};
+          for (const [id, list] of Object.entries(draft.entries)) {
+            const clean = [];
+            for (const x of list) {
+              if (!Number.isFinite(x.w) || x.w < 0 || !Number.isFinite(x.r) || x.r < 1) {
+                fail('Κάποιο σετ έχει άκυρα κιλά ή επαναλήψεις. Κιλά από 0 και πάνω, επαναλήψεις από 1 και πάνω.');
+                return;
+              }
+              clean.push({ w: +x.w.toFixed(2), r: Math.round(x.r) });
+            }
+            if (clean.length) entries[id] = clean;
+          }
+
+          const clash = state.sessions.find((x) => x.id !== session.id && x.date === draft.date && x.day === draft.day);
+          if (clash) {
+            fail(`Υπάρχει ήδη «${dayLabel(draft.day)}» στις ${shortDate(draft.date)}. Σβήσε πρώτα εκείνη ή διάλεξε άλλη μέρα.`);
+            return;
+          }
+
+          if (!Object.keys(entries).length && !draft.done) {
+            if (confirm('Δεν έμεινε κανένα σετ. Να διαγραφεί η προπόνηση;')) removeSession();
+            return;
+          }
+
+          session.date = draft.date;
+          session.day = draft.day;
+          session.done = draft.done;
+          session.entries = entries;
+          save('sessions');
+          closeSessionEditor();
+          renderAll();
+        }
+      });
+
+      sheet.addEventListener('change', (e) => {
+        if (e.target.id === 'hx-day') {
+          collect();
+          draft.day = e.target.value;
+          paint();
+        } else if (e.target.id === 'hx-new' && e.target.value) {
+          collect();
+          draft.entries[e.target.value] = [{ w: 0, r: 8 }];
+          paint();
+        }
+      });
+
+      paint();
     }
 
     /* ---------- Διατροφή ---------- */
@@ -7569,8 +8043,14 @@ function __bootWorkout() {
         : null;
       if (s.status === 'syncing') return { text: 'Γίνεται συγχρονισμός…', ok: true };
       if (s.status === 'error') {
+        if (navigator.onLine === false) {
+          return {
+            text: 'Χωρίς σύνδεση αυτή τη στιγμή. Τα δεδομένα είναι ασφαλή στη συσκευή και θα ανέβουν μόλις ξαναβρεθεί δίκτυο.',
+            ok: false
+          };
+        }
         return {
-          text: 'Χωρίς σύνδεση αυτή τη στιγμή. Τα δεδομένα είναι ασφαλή στη συσκευή και θα ανέβουν μόλις ξαναβρεθεί δίκτυο.',
+          text: 'Ο συγχρονισμός απέτυχε' + (s.message ? ' (' + s.message + ')' : '') + '. Τα δεδομένα είναι ασφαλή στη συσκευή και θα ξαναδοκιμάσει μόνο του.',
           ok: false
         };
       }
@@ -8472,6 +8952,8 @@ function __bootWorkout() {
 
   /* Το κουμπί «πίσω» του κινητού κλείνει πρώτα το καρνέ. */
   window.addEventListener("popstate", function () {
+    var hx = document.getElementById("hx-sheet");
+    if (hx) { hx.remove(); return; }
     var sheet = document.getElementById("report-sheet");
     if (sheet) {
       sheet.remove();
