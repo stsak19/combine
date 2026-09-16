@@ -4899,6 +4899,8 @@ loadAppSettings().then(() => {
       <p id="storage-mode"></p>
     </div>
 
+    <div class="panel" id="goal-panel" hidden></div>
+
     <div class="panel">
       <h3>Μέρες την εβδομάδα</h3>
       <p class="hint">Πόσες μέρες θέλεις να γυμνάζεσαι μέσα στην εβδομάδα;</p>
@@ -5356,6 +5358,10 @@ function __bootWorkout() {
       ]
     };
 
+    /* Διατροφή ανά στόχο. delta = αλλαγή θερμίδων πάνω στη συντήρηση,
+       protein / fat = γραμμάρια ανά κιλό σωματικού βάρους, range = εύρος
+       πρωτεΐνης που δείχνουμε. Πηγές: Helms et al. 2014 (JISSN), ISSN
+       Jäger et al. 2017, MATADOR (Byrne et al. 2017), ACSM 2026. */
     const NUTRITION = {
       activity: [
         { id: 1.2,   label: 'Καθιστική ζωή, ελάχιστο περπάτημα' },
@@ -5364,9 +5370,18 @@ function __bootWorkout() {
         { id: 1.725, label: 'Υψηλή, χειρωνακτική δουλειά ή 6+ προπονήσεις' }
       ],
       goals: [
-        { id: 'recomp', label: 'Recomposition', delta: -0.10, hint: 'Ελαφρύ έλλειμμα ~10%. Η ζυγαριά μένει σχεδόν σταθερή ενώ αλλάζει η σύσταση.' },
-        { id: 'cut',    label: 'Γράμμωση',      delta: -0.18, hint: 'Στόχος ~0.5% του βάρους την εβδομάδα. Πιο γρήγορα σημαίνει απώλεια μυών.' },
-        { id: 'bulk',   label: 'Lean bulk',     delta: 0.08,  hint: 'Ελαφρύ πλεόνασμα. Για όταν είσαι ήδη γύρω στο 12% και θέλεις περισσότερο μυ.' }
+        { id: 'recomp', label: 'Recomposition', delta: -0.07, protein: 2.2, fat: 0.8, range: [2.0, 2.4],
+          hint: 'Γύρω από τη συντήρηση, με μικρό έλλειμμα. Η ζυγαριά μένει σχεδόν σταθερή ενώ αλλάζει η σύσταση. Η υψηλή πρωτεΐνη είναι το κλειδί.' },
+        { id: 'cut',    label: 'Γράμμωση',      delta: -0.15, protein: 2.4, fat: 0.7, range: [2.2, 2.8],
+          hint: 'Στόχος 0.5–1% του βάρους την εβδομάδα. Πιο γρήγορα σημαίνει απώλεια μυών. Κάθε 6–12 εβδομάδες, 1–2 εβδομάδες στη συντήρηση βοηθούν να μην κολλήσεις.' },
+        { id: 'bulk',   label: 'Lean bulk',     delta: 0.08,  protein: 1.8, fat: 1.0, range: [1.6, 2.2],
+          hint: 'Ελαφρύ πλεόνασμα, περίπου +200–350 θερμίδες. Στόχος 0.25–0.5% του βάρους την εβδομάδα. Αν ανεβαίνεις πιο γρήγορα, μάζεψε λίγο τις θερμίδες.' },
+        { id: 'perform', label: 'Δύναμη και απόδοση', delta: 0.03, protein: 1.8, fat: 0.9, range: [1.6, 2.2],
+          hint: 'Συντήρηση ή ελάχιστα πάνω. Χρειάζεσαι αρκετούς υδατάνθρακες για να αποδίδεις στα βαριά σετ.' },
+        { id: 'maintain', label: 'Συντήρηση', delta: 0, protein: 1.8, fat: 0.9, range: [1.6, 2.0],
+          hint: 'Τρως όσο καις. Το βάρος μένει σταθερό και η πρωτεΐνη κρατά τους μυς.' },
+        { id: 'recovery', label: 'Επιστροφή από τραυματισμό', delta: 0, protein: 2.0, fat: 0.9, range: [1.6, 2.2],
+          hint: 'Όχι δίαιτα σε αυτή τη φάση: ο οργανισμός χρειάζεται θερμίδες και πρωτεΐνη για να επουλωθεί.' }
       ],
       proteinPerKg: 2.0,
       fatPerKg: 0.8,
@@ -5457,11 +5472,18 @@ function __bootWorkout() {
       }
     ];
 
-    /* ---------- Έτοιμα προγράμματα ----------
-       Ο στόχος δεν αλλάζει τόσο τις ασκήσεις όσο το πόσα σετ, σε πόσες
-       επαναλήψεις και με πόση ξεκούραση τις κάνεις — και, κυρίως, τη
-       διατροφή. Γι' αυτό το πρότυπο (πόσες μέρες) και το preset (στόχος)
-       είναι δύο ξεχωριστά πράγματα που συνδυάζονται. */
+    /* ---------- Έτοιμα προγράμματα ανά στόχο ----------
+       Από την έρευνα (Σεπτ. 2026): ο σκελετός μένει ίδιος σε όλους τους
+       στόχους (10–20 σετ ανά μυ την εβδομάδα, κάθε μυς 2 φορές). Ο στόχος
+       αλλάζει κυρίως τις επαναλήψεις, την ξεκούραση, το πόσο κοντά στην
+       αποτυχία πας, το καρντιό και τη διατροφή.
+
+       sets / reps / rest / rir ανά ρόλο άσκησης (main, aux, iso).
+       mix: πώς μοιράζονται οι μέρες της εβδομάδας για τον στόχο
+         maxLift   = πόσες μέρες με βάρη το πολύ (οι υπόλοιπες γίνονται κίνηση)
+         fullUpTo  = μέχρι τόσες μέρες με βάρη, όλες full body
+         move      = τι είδους μέρα κίνησης προτείνουμε ('walk' | 'cardio')
+       brief: τι βλέπει ο πελάτης στις Ρυθμίσεις για τον στόχο του. */
 
     const PRESETS = {
       recomp: {
@@ -5470,20 +5492,34 @@ function __bootWorkout() {
         nutrition: 'recomp',
         days: 3,
         sets: { main: 3, aux: 3, iso: 3 },
-        reps: { main: [6, 10], aux: [8, 12], iso: [12, 20] },
-        rest: { main: 165, aux: 120, iso: 60 },
-        rir:  { main: '1–3', aux: '1–3', iso: '0–2' }
+        reps: { main: [6, 10], aux: [8, 12], iso: [10, 15] },
+        rest: { main: 150, aux: 105, iso: 75 },
+        rir:  { main: '1–3', aux: '1–2', iso: '0–2' },
+        mix:  { maxLift: 6, fullUpTo: 3, move: 'walk' },
+        brief: {
+          who: 'Ιδανικό αν είσαι αρχάριος, αν επιστρέφεις μετά από διακοπή ή αν έχεις αρκετό λίπος να χάσεις.',
+          train: 'Full body 3 φορές ή άνω/κάτω 4 φορές. 10–18 σετ ανά μυ την εβδομάδα.',
+          cardio: '2–3 ήπια καρντιό των 20–40 λεπτών και 8.000–10.000 βήματα την ημέρα.',
+          phase: 'Όσο βλέπεις πρόοδο σε δύναμη και καθρέφτη. Όταν κολλήσεις, πέρνα σε γράμμωση ή lean bulk.'
+        }
       },
       cut: {
         label: 'Γράμμωση',
         tagline: 'Έλλειμμα θερμίδων με βαριά κιλά, ώστε το σώμα να κρατήσει τον μυ.',
         nutrition: 'cut',
-        days: 3,
+        days: 4,
         sets: { main: 3, aux: 3, iso: 2 },
-        reps: { main: [5, 8], aux: [8, 12], iso: [12, 20] },
-        rest: { main: 180, aux: 120, iso: 45 },
-        rir:  { main: '1–2', aux: '1–3', iso: '0–2' },
-        note: 'Στο έλλειμμα δεν κυνηγάς νέα ρεκόρ. Στόχος είναι να κρατήσεις τα κιλά που ήδη σηκώνεις.'
+        reps: { main: [5, 8], aux: [8, 12], iso: [10, 15] },
+        rest: { main: 165, aux: 105, iso: 75 },
+        rir:  { main: '1–2', aux: '1–2', iso: '0–1' },
+        mix:  { maxLift: 5, fullUpTo: 3, move: 'walk' },
+        note: 'Στο έλλειμμα δεν κυνηγάς νέα ρεκόρ. Στόχος είναι να κρατήσεις τα κιλά που ήδη σηκώνεις — αυτό λέει στο σώμα να μη χάσει μυ.',
+        brief: {
+          who: 'Όταν έχεις ήδη μυ και θέλεις να φανεί, ή όταν το λίπος είναι το κύριο θέμα.',
+          train: 'Κρατάς βαριά κιλά στις βασικές ασκήσεις. 10–16 σετ ανά μυ — όχι περισσότερα, η ανάρρωση είναι πιο αργή.',
+          cardio: '2–4 ήπια καρντιό (ποδήλατο ή ελλειπτικό) και 8.000–12.000 βήματα. Τα βήματα κάνουν τη μεγαλύτερη διαφορά.',
+          phase: '8–16 εβδομάδες. Μετά πέρνα σε συντήρηση για λίγες εβδομάδες πριν ξεκινήσεις κάτι άλλο.'
+        }
       },
       bulk: {
         label: 'Lean bulk',
@@ -5491,71 +5527,124 @@ function __bootWorkout() {
         nutrition: 'bulk',
         days: 4,
         sets: { main: 4, aux: 3, iso: 3 },
-        reps: { main: [6, 10], aux: [8, 12], iso: [10, 15] },
-        rest: { main: 180, aux: 135, iso: 75 },
-        rir:  { main: '1–2', aux: '1–3', iso: '0–2' }
+        reps: { main: [5, 8], aux: [8, 12], iso: [10, 15] },
+        rest: { main: 165, aux: 105, iso: 75 },
+        rir:  { main: '1–3', aux: '1–2', iso: '0–2' },
+        mix:  { maxLift: 6, fullUpTo: 3, move: 'walk' },
+        note: 'Η πρόοδος στα κιλά είναι το σήμα ότι χτίζεις μυ. Αν η ζυγαριά ανεβαίνει αλλά τα κιλά στις ασκήσεις όχι, κάτι πρέπει να αλλάξει.',
+        brief: {
+          who: 'Όταν είσαι ήδη σχετικά αδύνατος και θέλεις περισσότερο μυ.',
+          train: '4–6 μέρες βάρη. 12–20 σετ ανά μυ την εβδομάδα, με συνεχή άνοδο στα κιλά.',
+          cardio: '2–3 ήπια καρντιό των 20–30 λεπτών για την καρδιά, χωρίς να κουράζουν τα πόδια.',
+          phase: '12–24 εβδομάδες. Σταματάς όταν το λίπος αρχίσει να ανεβαίνει αισθητά και κάνεις μια σύντομη γράμμωση.'
+        }
       },
       strength: {
         label: 'Δύναμη',
         tagline: 'Λίγες επαναλήψεις, βαριά κιλά, μεγάλη ξεκούραση στις σύνθετες.',
-        nutrition: 'recomp',
-        days: 3,
+        nutrition: 'perform',
+        days: 4,
         sets: { main: 4, aux: 3, iso: 2 },
-        reps: { main: [3, 6], aux: [6, 10], iso: [10, 15] },
-        rest: { main: 210, aux: 150, iso: 60 },
-        rir:  { main: '2–3', aux: '1–3', iso: '0–2' }
+        reps: { main: [3, 5], aux: [5, 8], iso: [8, 12] },
+        rest: { main: 240, aux: 150, iso: 90 },
+        rir:  { main: '1–3', aux: '2–3', iso: '1–2' },
+        mix:  { maxLift: 6, fullUpTo: 3, move: 'cardio' },
+        note: 'Στα βαριά σετ άφησε 1–3 επαναλήψεις στο ρεζερβουάρ. Η αποτυχία στα βαριά φέρνει κούραση, όχι περισσότερη δύναμη.',
+        brief: {
+          who: 'Όταν σε ενδιαφέρουν τα νούμερα στις βασικές κινήσεις: squat, πιέσεις, deadlift.',
+          train: 'Οι βασικές ασκήσεις πρώτες, βαριές (3–5 επαναλήψεις) με 3–5 λεπτά ξεκούραση. 3–4 μέρες την εβδομάδα.',
+          cardio: 'Λίγο: 1–2 φορές ποδήλατο 20 λεπτά. Το τρέξιμο κουράζει περισσότερο τα πόδια.',
+          phase: 'Κύκλοι 8–16 εβδομάδων με ελαφριά εβδομάδα κάθε 4–6.'
+        }
       },
       endurance: {
         label: 'Αντοχή',
         tagline: 'Περισσότερες επαναλήψεις, μικρά διαλείμματα, ελαφρύτερα κιλά.',
-        nutrition: 'recomp',
-        days: 3,
-        sets: { main: 3, aux: 3, iso: 3 },
-        reps: { main: [10, 15], aux: [12, 15], iso: [15, 25] },
-        rest: { main: 90, aux: 75, iso: 45 },
-        rir:  { main: '2–3', aux: '1–3', iso: '0–2' }
+        nutrition: 'maintain',
+        days: 4,
+        sets: { main: 3, aux: 3, iso: 2 },
+        reps: { main: [12, 15], aux: [15, 20], iso: [15, 25] },
+        rest: { main: 75, aux: 50, iso: 40 },
+        rir:  { main: '2–3', aux: '1–3', iso: '1–2' },
+        mix:  { maxLift: 4, fullUpTo: 4, move: 'cardio' },
+        brief: {
+          who: 'Όταν θέλεις να κουράζεσαι λιγότερο, να έχεις ανάσα και ενέργεια.',
+          train: 'Full body 3–4 φορές με 12–25 επαναλήψεις και μικρά διαλείμματα. Όταν οι επαναλήψεις γίνουν εύκολες, ανεβάζεις κιλά.',
+          cardio: '3–5 καρντιό την εβδομάδα: τα περισσότερα ήπια 30–45 λεπτά, 1–2 πιο έντονα. 10.000 βήματα.',
+          phase: 'Βελτίωση σε 6–12 εβδομάδες. Ελαφριά εβδομάδα κάθε 6–8.'
+        }
       },
       maintain: {
         label: 'Διατήρηση',
         tagline: 'Σταθερή ρουτίνα χωρίς πίεση. Κρατάς ό,τι έχεις με τον λιγότερο κόπο.',
-        nutrition: 'recomp',
-        days: 2,
-        sets: { main: 3, aux: 2, iso: 2 },
-        reps: { main: [6, 10], aux: [8, 12], iso: [12, 20] },
-        rest: { main: 150, aux: 120, iso: 60 },
-        rir:  { main: '2–3', aux: '2–3', iso: '1–2' }
+        nutrition: 'maintain',
+        days: 3,
+        sets: { main: 2, aux: 2, iso: 2 },
+        reps: { main: [5, 8], aux: [8, 12], iso: [10, 15] },
+        rest: { main: 150, aux: 120, iso: 75 },
+        rir:  { main: '1–2', aux: '1–2', iso: '0–2' },
+        mix:  { maxLift: 3, fullUpTo: 3, move: 'walk' },
+        note: 'Μπορείς να κάνεις λιγότερα σετ, αλλά κράτα τα κιλά βαριά. Αν πέσει και η ένταση μαζί με τον όγκο, χάνεις γρήγορα ό,τι έχτισες.',
+        brief: {
+          who: 'Για περιόδους με φόρτο, ταξίδια ή απλά όταν θέλεις να κρατήσεις τη φόρμα σου.',
+          train: '2–3 full body. Αρκούν 6–10 σετ ανά μυ την εβδομάδα, αρκεί τα κιλά να μείνουν βαριά.',
+          cardio: '2–3 ήπιες μέρες κίνησης για την υγεία.',
+          phase: 'Όσο θέλεις — είναι και η φάση ανάμεσα σε γράμμωση και lean bulk.'
+        }
       },
       beginner: {
         label: 'Πρώτη φορά στο γυμναστήριο',
         tagline: 'Λίγες ασκήσεις, καθαρή τεχνική, ήπια φορτία. Πρώτα η συνήθεια, μετά τα κιλά.',
         nutrition: 'recomp',
         days: 3,
-        sets: { main: 3, aux: 2, iso: 2 },
-        reps: { main: [8, 12], aux: [10, 12], iso: [12, 15] },
-        rest: { main: 150, aux: 120, iso: 60 },
-        rir:  { main: '2–3', aux: '2–3', iso: '1–2' },
-        note: 'Τις πρώτες εβδομάδες κρατάς κιλά που σε αφήνουν να εκτελείς καθαρά. Η πρόοδος έρχεται μόνη της.'
+        sets: { main: 2, aux: 2, iso: 2 },
+        reps: { main: [8, 12], aux: [8, 12], iso: [10, 15] },
+        rest: { main: 105, aux: 90, iso: 60 },
+        rir:  { main: '2–4', aux: '2–4', iso: '2–3' },
+        mix:  { maxLift: 3, fullUpTo: 3, move: 'walk' },
+        note: 'Τις πρώτες εβδομάδες κρατάς κιλά που σε αφήνουν να εκτελείς καθαρά. Όταν πιάνεις όλες τις επαναλήψεις άνετα, ανεβαίνεις λίγο. Η πρόοδος έρχεται μόνη της.',
+        brief: {
+          who: 'Για τους πρώτους 3–6 μήνες στο γυμναστήριο.',
+          train: 'Full body 2–3 φορές, με μία μέρα ξεκούρασης ανάμεσα. Μακριά από την αποτυχία — μαθαίνεις την κίνηση.',
+          cardio: '2–3 ήπιες μέρες περπάτημα. Πρώτα χτίζεις τη συνήθεια.',
+          phase: '3–6 μήνες. Μετά πέρνα σε recomposition, γράμμωση ή lean bulk ανάλογα με τον στόχο σου.'
+        }
       },
       event: {
         label: 'Προετοιμασία για αγώνα ή τεστ',
         tagline: 'Δύναμη στις βασικές κινήσεις και απόδοση, με βλέμμα στην ημερομηνία.',
-        nutrition: 'recomp',
+        nutrition: 'perform',
         days: 4,
         sets: { main: 4, aux: 3, iso: 2 },
-        reps: { main: [4, 8], aux: [8, 12], iso: [12, 15] },
-        rest: { main: 195, aux: 140, iso: 60 },
-        rir:  { main: '1–2', aux: '1–3', iso: '0–2' }
+        reps: { main: [3, 6], aux: [6, 10], iso: [10, 15] },
+        rest: { main: 210, aux: 135, iso: 75 },
+        rir:  { main: '1–2', aux: '1–3', iso: '1–2' },
+        mix:  { maxLift: 5, fullUpTo: 3, move: 'cardio' },
+        note: 'Τις τελευταίες 1–2 εβδομάδες πριν την ημερομηνία κόψε περίπου τα μισά σετ, αλλά κράτα τα ίδια κιλά και τις ίδιες μέρες. Έτσι φτάνεις ξεκούραστος χωρίς να χάσεις δύναμη.',
+        brief: {
+          who: 'Όταν δουλεύεις για συγκεκριμένη ημερομηνία: αγώνα, τεστ, σχολή.',
+          train: 'Βαριά δουλειά στις κινήσεις που μετράνε. Στο τέλος: 1–2 εβδομάδες με τα μισά σετ και ίδια ένταση.',
+          cardio: 'Ανάλογα με το τεστ. Αν δεν είναι αντοχής, 1–2 ήπια καρντιό.',
+          phase: '8–16 εβδομάδες μέχρι την ημερομηνία. Μην ξεκουραστείς περισσότερο από 3 εβδομάδες στο τέλος.'
+        }
       },
       rehab: {
         label: 'Επιστροφή μετά από τραυματισμό',
         tagline: 'Ελεγχόμενα φορτία, μεγάλα εύρη, τίποτα κοντά στην αποτυχία.',
-        nutrition: 'recomp',
-        days: 2,
+        nutrition: 'recovery',
+        days: 3,
         sets: { main: 2, aux: 2, iso: 2 },
-        reps: { main: [10, 15], aux: [10, 15], iso: [12, 20] },
-        rest: { main: 150, aux: 120, iso: 60 },
+        reps: { main: [12, 15], aux: [12, 20], iso: [15, 20] },
+        rest: { main: 120, aux: 90, iso: 60 },
         rir:  { main: '3–4', aux: '3–4', iso: '2–3' },
-        note: 'Αν κάτι πονάει, σταμάτα την κίνηση. Πρώτα ο γιατρός ή ο φυσικοθεραπευτής, μετά η εφαρμογή.'
+        mix:  { maxLift: 3, fullUpTo: 3, move: 'cardio' },
+        note: 'Αν κάτι πονάει πάνω από 3 στα 10, ή πονάει περισσότερο την επόμενη μέρα, σταμάτα αυτή την κίνηση. Πρώτα ο γιατρός ή ο φυσικοθεραπευτής, μετά η εφαρμογή.',
+        brief: {
+          who: 'Μόνο αφού σου πει ο γιατρός ή ο φυσικοθεραπευτής ότι μπορείς να γυμναστείς.',
+          train: 'Ελαφριά κιλά με πολλές επαναλήψεις και ανεβαίνεις σιγά σιγά. Ό,τι δεν επηρεάζεται από τον τραυματισμό το δουλεύεις κανονικά.',
+          cardio: 'Χωρίς κρούσεις: ποδήλατο, ελλειπτικό, κολύμπι.',
+          phase: 'Όσο χρειάζεται — ανεβάζεις ένταση κάθε 3–4 εβδομάδες, με τη σύμφωνη γνώμη του θεραπευτή σου.'
+        }
       }
     };
 
@@ -5615,7 +5704,7 @@ function __bootWorkout() {
       event: 'event'
     };
     /* Ποιοι κύριοι στόχοι θέλουν και μέρα κίνησης μέσα στην εβδομάδα. */
-    const PRIMARY_CARDIO = { cut: true, endurance: true, maintain: true };
+    const PRIMARY_CARDIO = { recomp: true, cut: true, endurance: true, maintain: true, beginner: true, rehab: true };
 
     const GOAL_MAP = {
       weight_loss:     { preset: 'cut',       rank: 10 },
@@ -5664,15 +5753,28 @@ function __bootWorkout() {
 
     /* Ο πελάτης διαλέγει μόνο πόσες μέρες. Το πώς μοιράζονται μέσα
        στην εβδομάδα το αποφασίζει η εφαρμογή. */
-    function autoMix(days, cardio) {
+    function autoMix(days, cardio, presetId) {
       const total = Math.min(7, Math.max(2, Math.round(Number(days) || 3)));
+      const rule = ((PRESETS[presetId] || {}).mix) || { maxLift: MAX_LIFT_DAYS, fullUpTo: 3, move: 'walk' };
+      /* Μέχρι τρεις μέρες είναι όλες με βάρη. Από τέσσερις και πάνω, όσοι
+         στόχοι θέλουν κίνηση παίρνουν μία ή δύο μέρες εκτός γυμναστηρίου. */
       let move = 0;
-      if (cardio && total >= 3) move = total >= 5 ? 2 : 1;
+      if (cardio && total >= 4) move = total >= 6 ? 2 : 1;
       let lift = total - move;
-      if (lift > MAX_LIFT_DAYS) { move += lift - MAX_LIFT_DAYS; lift = MAX_LIFT_DAYS; }
+      const cap = Math.min(MAX_LIFT_DAYS, rule.maxLift || MAX_LIFT_DAYS);
+      if (lift > cap) { move += lift - cap; lift = cap; }
       if (lift < 2) { lift = Math.min(2, total); move = total - lift; }
-      const base = { ...(LEGACY_MIX[lift] || LEGACY_MIX[3]) };
-      if (move > 0) base.walk = move;
+      /* Ορισμένοι στόχοι (αρχάριος, αντοχή, διατήρηση) μένουν σε full body. */
+      const base = lift <= (rule.fullUpTo || 3)
+        ? { full: lift }
+        : { ...(LEGACY_MIX[lift] || LEGACY_MIX[3]) };
+      if (move > 0) {
+        const kind = rule.move === 'cardio' ? 'cardio' : 'walk';
+        /* Με δύο ή περισσότερες μέρες κίνησης, μία ήπια βόλτα κι ένα καρντιό. */
+        if (move >= 2 && kind === 'cardio') { base.cardio = move - 1; base.walk = 1; }
+        else if (move >= 2 && presetId === 'cut') { base.walk = move - 1; base.cardio = 1; }
+        else base[kind] = move;
+      }
       return base;
     }
 
@@ -8065,8 +8167,8 @@ function __bootWorkout() {
       const tdee = bmr * p.activity;
       const goal = NUTRITION.goals.find((g) => g.id === p.goal) || NUTRITION.goals[0];
       const kcal = Math.round((tdee * (1 + goal.delta)) / 10) * 10;
-      const protein = Math.round(p.weight * NUTRITION.proteinPerKg);
-      const fat = Math.round(p.weight * NUTRITION.fatPerKg);
+      const protein = Math.round(p.weight * (goal.protein || NUTRITION.proteinPerKg));
+      const fat = Math.round(p.weight * (goal.fat || NUTRITION.fatPerKg));
       const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
       return {
         bmr,
@@ -8103,9 +8205,9 @@ function __bootWorkout() {
           <span class="k">Πρωτεΐνη ανά γεύμα (4 γεύματα)</span><span class="v">${perMeal} γρ.</span>
         </div>
         <div class="stat-row">
-          <span class="k">Πρωτεΐνη ανά κιλό</span><span class="v">${NUTRITION.proteinPerKg}</span>
+          <span class="k">Πρωτεΐνη ανά κιλό</span><span class="v">${goal.protein || NUTRITION.proteinPerKg}</span>
         </div>
-        <p class="hint">Εύρος πρωτεΐνης 1.6–2.2 g/kg, δηλαδή ${Math.round(p.weight * 1.6)}–${Math.round(p.weight * 2.2)} γραμμάρια. Ο αριθμός πάνω είναι μια καλή αφετηρία μέσα σε αυτό το εύρος.</p>
+        <p class="hint">Εύρος πρωτεΐνης για αυτόν τον στόχο ${(goal.range || [1.6, 2.2]).join('–')} g/kg, δηλαδή ${Math.round(p.weight * (goal.range || [1.6, 2.2])[0])}–${Math.round(p.weight * (goal.range || [1.6, 2.2])[1])} γραμμάρια. Ο αριθμός πάνω είναι μια καλή αφετηρία μέσα σε αυτό το εύρος.</p>
         ${low ? '<div class="warn">Ο υπολογισμός βγάζει πολύ χαμηλές θερμίδες. Διάλεξε ηπιότερο στόχο ή συζήτησέ το με διαιτολόγο πριν προχωρήσεις.</div>' : ''}
         <p class="hint">Αυτοί είναι υπολογισμοί αφετηρίας από εξίσωση, όχι μέτρηση. Κράτησέ τους 3–4 εβδομάδες και προσάρμοσε με βάση το τι δείχνουν η ζυγαριά, οι φωτογραφίες και η απόδοση στο γυμναστήριο.</p>
       `;
@@ -8163,7 +8265,7 @@ function __bootWorkout() {
         ...state.plan.config,
         preset: c ? c.preset : (state.plan.config.preset || 'recomp'),
         emphasis: c ? [...c.emphasis] : [...(state.plan.config.emphasis || [])],
-        mix: autoMix(n, c ? c.cardio : false),
+        mix: autoMix(n, c ? c.cardio : false, c ? c.preset : (state.plan.config.preset || 'recomp')),
         source: c ? 'goals' : (state.plan.config.source || 'default')
       };
       next.days = mixTotal(next.mix);
@@ -8236,7 +8338,36 @@ function __bootWorkout() {
       return t >= 2 && t <= 7 ? t : currentDays();
     }
 
+    /* Τι σημαίνει ο στόχος του πελάτη: αριθμοί του προγράμματος και οδηγίες. */
+    function renderGoalPanel() {
+      const host = $('#goal-panel');
+      if (!host) return;
+      const p = PRESETS[state.plan.config.preset];
+      if (!p) { host.hidden = true; return; }
+      const b = p.brief || {};
+      const fmtRest = (s) => s >= 60
+        ? (s % 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}′` : `${s / 60}′`)
+        : `${s}″`;
+      const roles = [['main', 'Βασικές'], ['aux', 'Δευτερεύουσες'], ['iso', 'Μονωτικές']];
+      const row = (k, v) => `<div class="stat-row"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`;
+      const food = (NUTRITION.goals.find((g) => g.id === p.nutrition) || {});
+      host.hidden = false;
+      host.innerHTML =
+        `<h3>Ο στόχος σου: ${esc(p.label)}</h3>` +
+        `<p class="hint">${esc(p.tagline || '')}</p>` +
+        (b.who ? `<p class="hint">${esc(b.who)}</p>` : '') +
+        roles.map(([r, l]) => row(l,
+          `${p.sets[r]} × ${p.reps[r][0]}–${p.reps[r][1]} · ${fmtRest(p.rest[r])} · RIR ${p.rir[r]}`)).join('') +
+        (b.train ? `<p class="hint" style="margin-top:12px"><strong>Προπόνηση.</strong> ${esc(b.train)}</p>` : '') +
+        (b.cardio ? `<p class="hint"><strong>Κίνηση.</strong> ${esc(b.cardio)}</p>` : '') +
+        (food.hint ? `<p class="hint"><strong>Διατροφή.</strong> ${esc(food.hint)} Πρωτεΐνη ${(food.range || [1.6, 2.2]).join('–')} g/kg.</p>` : '') +
+        (b.phase ? `<p class="hint"><strong>Διάρκεια.</strong> ${esc(b.phase)}</p>` : '') +
+        (p.note ? `<div class="warn">${esc(p.note)}</div>` : '') +
+        `<p class="hint">Τον στόχο τον αλλάζεις από τις Ρυθμίσεις της εφαρμογής κρατήσεων.</p>`;
+    }
+
     function renderConfig() {
+      renderGoalPanel();
       const host = $('#config-panel');
       if (!host) return;
 
@@ -8287,7 +8418,7 @@ function __bootWorkout() {
       const days = Math.min(7, Math.max(2, Math.round(Number(n) || 3)));
       if (days === targetDays() && mixTotal(normalizeMix(state.plan.config)) === days) return;
       const c = goalConfig();
-      const mix = autoMix(days, c ? c.cardio : false);
+      const mix = autoMix(days, c ? c.cardio : false, c ? c.preset : state.plan.config.preset);
       const next = { ...state.plan.config, mix, days: mixTotal(mix), target: days, custom: true };
       delete next.cardio;
       applyPlanConfig(next);
