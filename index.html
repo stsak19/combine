@@ -1523,6 +1523,32 @@ button.history-item:active { background: var(--accent-soft); }
   text-align: center;
 }
 
+.log-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.log-date .chip { padding: 8px 12px; font-size: 14px; }
+.log-date input[type='date'] {
+  -webkit-appearance: none;
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  color-scheme: dark;
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--muted);
+}
+.log-date input[data-on="true"] { border-color: var(--accent-line); color: var(--accent); }
+.log-date-note {
+  flex-basis: 100%;
+  font-size: 13px;
+  color: var(--accent);
+}
+
 #cfg-preview {
   margin: 14px 0 12px;
   border: 1px solid var(--rule);
@@ -4787,6 +4813,7 @@ loadAppSettings().then(() => {
     <div class="section-head">
       <h2 id="day-title">—</h2>
       <p id="day-focus"></p>
+      <div class="log-date" id="log-date" role="group" aria-label="Για ποια μέρα καταγράφεις"></div>
     </div>
     <div id="exercise-list"></div>
     <div class="btn-row">
@@ -6769,7 +6796,20 @@ function __bootWorkout() {
       return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
     };
 
-    const today = () => new Date().toISOString().slice(0, 10);
+    /* Η ημερομηνία της συσκευής (τοπική ώρα). Το toISOString δίνει ώρα UTC
+       και μετά τα μεσάνυχτα έγραφε την προπόνηση στην προηγούμενη μέρα. */
+    const isoLocal = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = () => isoLocal(new Date());
+    const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoLocal(d); };
+
+    /* Για ποια μέρα καταγράφεις. Ξεκινά πάντα από σήμερα· αν ξέχασες να
+       γράψεις κάτι, διαλέγεις «Χθες» και όλα πάνε στη σωστή ημερομηνία. */
+    let LOG_DATE = null;
+    const logDate = () => {
+      if (!LOG_DATE || LOG_DATE > today()) LOG_DATE = null;
+      return LOG_DATE || today();
+    };
 
     const shortDate = (iso) => {
       const d = new Date(iso + 'T00:00:00');
@@ -6928,7 +6968,7 @@ function __bootWorkout() {
 
     function lastPerformance(exId) {
       const ids = historyIds(exId);
-      const past = sortedSessions().filter((s) => s.date !== today());
+      const past = sortedSessions().filter((s) => s.date < logDate());
       for (let i = past.length - 1; i >= 0; i--) {
         const sets = ids.map((id) => past[i].entries[id]).find((x) => x && x.length);
         if (sets && sets.some((x) => x && x.w != null)) {
@@ -7056,7 +7096,7 @@ function __bootWorkout() {
       strip.innerHTML = '';
       DAY_ORDER.forEach((d) => {
         const day = PROGRAM[d];
-        const s = sessionFor(today(), d);
+        const s = sessionFor(logDate(), d);
         const btn = document.createElement('button');
         btn.className = 'daybtn';
         btn.setAttribute('aria-pressed', String(state.day === d));
@@ -7075,8 +7115,38 @@ function __bootWorkout() {
       });
     }
 
+    function renderLogDate() {
+      const host = $('#log-date');
+      if (!host) return;
+      const cur = logDate();
+      const quick = [[today(), 'Σήμερα'], [daysAgo(1), 'Χθες'], [daysAgo(2), 'Προχθές']];
+      const other = !quick.some(([d]) => d === cur);
+      host.innerHTML =
+        quick.map(([d, l]) =>
+          `<button type="button" class="chip" data-logdate="${d}" data-on="${d === cur}">${l}</button>`).join('') +
+        `<input type="date" id="log-date-pick" aria-label="Άλλη μέρα" max="${today()}" value="${other ? cur : ''}" data-on="${other}">` +
+        (cur !== today()
+          ? `<span class="log-date-note">Καταγράφεις για ${esc(shortDate(cur))} — όχι για σήμερα.</span>`
+          : '');
+      $$('[data-logdate]', host).forEach((b) =>
+        b.addEventListener('click', () => setLogDate(b.dataset.logdate)));
+      const pick = $('#log-date-pick', host);
+      pick.addEventListener('change', () => { if (pick.value) setLogDate(pick.value); });
+    }
+
+    function setLogDate(d) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d > today()) return;
+      LOG_DATE = d === today() ? null : d;
+      state.editing = null;
+      state.actEditing = false;
+      state.actType = null;
+      stopTimer();
+      renderTrain();
+    }
+
     function renderTrain() {
       renderDaystrip();
+      renderLogDate();
       const day = PROGRAM[state.day] || { name: '—', focus: '' };
       const wd = weekdayOf(state.day);
       $('#day-title').textContent = wd ? `${wd} · ${day.name}` : day.name;
@@ -7084,7 +7154,7 @@ function __bootWorkout() {
 
       const list = $('#exercise-list');
       list.innerHTML = '';
-      const session = sessionFor(today(), state.day);
+      const session = sessionFor(logDate(), state.day);
 
       /* Μέρα εκτός γυμναστηρίου: οδηγία, όχι σετ. Κλείνει κι αυτή, ώστε
          η ρότα της εβδομάδας να προχωράει κανονικά. */
@@ -7460,7 +7530,7 @@ function __bootWorkout() {
         const w = Number(wInput.value);
         const r = Number(rInput.value);
         if (!Number.isFinite(w) || w < 0 || !Number.isFinite(r) || r < 1) return;
-        const session = ensureSession(today(), state.day);
+        const session = ensureSession(logDate(), state.day);
         if (!session.entries[ex.id]) session.entries[ex.id] = [];
         session.entries[ex.id][index] = { w, r };
         save('sessions');
@@ -7473,7 +7543,7 @@ function __bootWorkout() {
       const clearBtn = $('[data-clear]', box);
       if (clearBtn) {
         clearBtn.addEventListener('click', () => {
-          const session = sessionFor(today(), state.day);
+          const session = sessionFor(logDate(), state.day);
           if (session && session.entries[ex.id]) {
             session.entries[ex.id][index] = null;
             if (session.entries[ex.id].every((x) => !x)) delete session.entries[ex.id];
@@ -7615,7 +7685,7 @@ function __bootWorkout() {
           }
           activity = { type: 'run', km: k, sec };
         }
-        const s = ensureSession(today(), state.day);
+        const s = ensureSession(logDate(), state.day);
         s.activity = activity;
         s.done = true;
         save('sessions');
@@ -7629,7 +7699,7 @@ function __bootWorkout() {
       const clearBtn = $('[data-clear]', wrap);
       if (clearBtn) {
         clearBtn.addEventListener('click', () => {
-          const s = sessionFor(today(), state.day);
+          const s = sessionFor(logDate(), state.day);
           if (s) {
             s.activity = null;
             save('sessions');
@@ -7647,12 +7717,12 @@ function __bootWorkout() {
     $('#finish-session').addEventListener('click', () => {
       const day = PROGRAM[state.day] || {};
       const isMove = day.kind === 'move';
-      let session = sessionFor(today(), state.day);
+      let session = sessionFor(logDate(), state.day);
       if (!isMove && (!session || !Object.keys(session.entries).length)) {
         alert('Καταχώρησε τουλάχιστον ένα σετ πριν ολοκληρώσεις την προπόνηση.');
         return;
       }
-      if (!session) session = ensureSession(today(), state.day);
+      if (!session) session = ensureSession(logDate(), state.day);
       session.done = true;
       save('sessions');
       stopTimer();
