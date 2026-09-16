@@ -652,8 +652,8 @@ body.mode-workout {
 .sets {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 12px;
+  gap: 12px 7px;
+  margin-top: 14px;
 }
 
 .setchip {
@@ -669,6 +669,33 @@ body.mode-workout {
 }
 
 .setchip:hover { border-color: var(--muted); }
+
+.setchip { position: relative; }
+
+/* Ανάμνηση της πρότασης που δόθηκε για σήμερα: ↑ ανέβα, = μείνε, ↓ ρίξε. */
+.sug-badge {
+  position: absolute;
+  top: -8px;
+  right: -5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #141414;
+  border: 1px solid var(--muted);
+  color: var(--ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sug-badge[data-act='up'] { border-color: var(--accent); color: var(--accent); }
+.sug-badge[data-act='stay'] { border-color: #8ab4ff; color: #8ab4ff; }
+.sug-badge[data-act='down'] { border-color: var(--red); color: var(--red); }
+
+.ex-sug { display: block; margin-top: 3px; font-weight: 600; }
+.ex-sug[data-act='up'] { color: var(--accent); }
+.ex-sug[data-act='stay'] { color: #8ab4ff; }
+.ex-sug[data-act='down'] { color: var(--red); }
 
 .setchip .val {
   display: block;
@@ -715,6 +742,16 @@ body.mode-workout {
   font-size: 14px;
   font-weight: 600;
   color: var(--on-accent);
+}
+.levelup-note[data-act='stay'] {
+  background: rgba(138, 180, 255, 0.14);
+  color: #b9d1ff;
+  border: 1px solid rgba(138, 180, 255, 0.45);
+}
+.levelup-note[data-act='down'] {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.45);
 }
 
 /* ---------- Επεξεργασία σετ ---------- */
@@ -2033,6 +2070,18 @@ const PRIMARY_GOALS = [
 ];
 const PRIMARY_LABELS = PRIMARY_GOALS.reduce((o, g) => { o[g.key] = g.label; return o; }, {});
 
+/* Το επίπεδο εμπειρίας. Κλειδιά ίδια με τα LEVELS του καρνέ και με τον
+   έλεγχο της clients.goal_level στη βάση. */
+const LEVEL_GOALS = [
+  { key: "beginner", label: "Αρχάριος",
+    desc: "Κάτω από 6 μήνες σταθερής προπόνησης με βάρη. Λιγότερα σετ, μαθαίνεις την κίνηση και ανεβάζεις κιλά σχεδόν κάθε εβδομάδα." },
+  { key: "intermediate", label: "Μέσος",
+    desc: "6 μήνες έως 2 χρόνια σταθερής προπόνησης. Το πρόγραμμα του στόχου σου όπως είναι." },
+  { key: "advanced", label: "Προχωρημένος",
+    desc: "Πάνω από 2 χρόνια και η πρόοδος έχει αρχίσει να αργεί. Ένα σετ παραπάνω, πιο κοντά στην αποτυχία, εναλλαγή βαριάς, μέτριας και ελαφριάς μέρας." },
+];
+const LEVEL_LABELS = LEVEL_GOALS.reduce((o, g) => { o[g.key] = g.label; return o; }, {});
+
 const GOAL_GROUPS = [
   { title: "Πού θέλεις έμφαση", keys: ["core", "vtaper", "glutes", "arms", "posture"] },
   { title: "Κίνηση και ευεξία", keys: ["flexibility", "pain_relief", "stress", "sleep", "energy", "routine", "classes"] },
@@ -3159,10 +3208,12 @@ function SettingsTab({ session, flash, theme, setTheme, onLogout, onAccountDelet
    η διαχείριση και το καρνέ προπόνησης — μία πηγή, τρεις οθόνες. */
 function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) {
   const [primary, setPrimary] = useState("");
+  const [level, setLevel] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState("");
+  const [savedLevel, setSavedLevel] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -3171,9 +3222,12 @@ function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) 
       if (!alive) return;
       if (!error && data) {
         const p = typeof data.primary === "string" ? data.primary : "";
+        const lv = LEVEL_LABELS[data.level] ? data.level : "";
         setPrimary(p);
         setSaved(p);
-        setOpen(!p);
+        setLevel(lv);
+        setSavedLevel(lv);
+        setOpen(!p || !lv);
       } else {
         setOpen(true);
       }
@@ -3186,15 +3240,18 @@ function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) 
      με το κουμπί. Οι παλιοί δευτερεύοντες και δικοί στόχοι δεν υπάρχουν
      πια στην οθόνη, οπότε καθαρίζουν. */
   const choose = (k) => { if (!saving) setPrimary(k); };
+  const chooseLevel = (k) => { if (!saving) setLevel(k); };
+  const dirty = primary !== saved || level !== savedLevel;
 
   const save = async () => {
-    if (!primary || saving) return;
+    if (!primary || !level || saving) return;
     setSaving(true);
     const { data, error } = await sb.rpc("save_goals", {
       p_client_id: session.clientId,
       p_goals: [],
       p_custom: [],
       p_primary: primary,
+      p_level: level,
     });
     setSaving(false);
     if (error || !data || data.ok !== true) {
@@ -3202,9 +3259,13 @@ function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) 
       return;
     }
     const p = typeof data.primary === "string" ? data.primary : primary;
+    const lv = LEVEL_LABELS[data.level] ? data.level : level;
     setPrimary(p);
     setSaved(p);
+    setLevel(lv);
+    setSavedLevel(lv);
     setOpen(false);
+    if (window.__workoutReloadGoals) window.__workoutReloadGoals();
     if (onGoalsChange) onGoalsChange(!!p);
     flash("Αποθηκεύτηκε");
   };
@@ -3253,21 +3314,59 @@ function GoalsPanel({ session, flash, onGoalsChange, workoutOn, setWorkoutOn }) 
                     );
                   })}
                 </div>
-                <Button size="lg" className="mt-3" disabled={!primary || saving || primary === saved} onClick={save}>
-                  {saving ? "Αποθήκευση…" : primary && primary === saved ? "Αποθηκευμένο" : "Αποθήκευση"}
+
+                <div className="mt-5 border-t border-neutral-300 pt-4">
+                  <div className="f-display text-[13px] font-bold uppercase tracking-wide">Επίπεδο</div>
+                  <p className="f-text mt-1 text-[13px] leading-relaxed text-neutral-600">
+                    Πόση εμπειρία έχεις με τα βάρη; Από αυτό αλλάζουν τα σετ, οι επαναλήψεις και η ένταση.
+                  </p>
+                  <div className="mt-2 flex flex-col">
+                    {LEVEL_GOALS.map((g) => {
+                      const on = level === g.key;
+                      return (
+                        <div key={g.key}>
+                          <button type="button" disabled={saving} onClick={() => chooseLevel(g.key)}
+                            className="flex w-full items-start gap-3 py-2 text-left">
+                            <span className={`mt-[1px] flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-black ${
+                              on ? "bg-black" : "bg-white"}`}>
+                              {on && <span className="h-[7px] w-[7px] rounded-full bg-white" />}
+                            </span>
+                            <span className={`f-text text-[16px] leading-snug ${on ? "font-bold" : ""}`}>{g.label}</span>
+                          </button>
+                          {on && (
+                            <p className="f-text mb-2 ml-8 text-[14px] leading-relaxed text-neutral-600">{g.desc}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <Button size="lg" className="mt-3" disabled={!primary || !level || saving || !dirty} onClick={save}>
+                  {saving ? "Αποθήκευση…" : primary && level && !dirty ? "Αποθηκευμένο" : "Αποθήκευση"}
                 </Button>
-                {saved && (
+                {!level && primary && (
+                  <p className="f-text mt-2 text-[13px] text-neutral-500">Διάλεξε και το επίπεδό σου.</p>
+                )}
+                {saved && savedLevel && (
                   <Button variant="ghost" className="mt-2 w-full" disabled={saving}
-                    onClick={() => { setPrimary(saved); setOpen(false); }}>
+                    onClick={() => { setPrimary(saved); setLevel(savedLevel); setOpen(false); }}>
                     Κλείσιμο
                   </Button>
                 )}
               </div>
             ) : (
               <div className="mt-4 flex items-center justify-between gap-3">
-                <span className="f-display border border-black bg-black px-3 py-2 text-[16px] font-bold uppercase tracking-wide text-white">
-                  {PRIMARY_LABELS[primary] || primary}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="f-display border border-black bg-black px-3 py-2 text-[16px] font-bold uppercase tracking-wide text-white">
+                    {PRIMARY_LABELS[saved] || saved}
+                  </span>
+                  {savedLevel && (
+                    <span className="f-display border border-black px-3 py-2 text-[14px] font-bold uppercase tracking-wide">
+                      {LEVEL_LABELS[savedLevel]}
+                    </span>
+                  )}
+                </div>
                 <button type="button" onClick={() => setOpen(true)}
                   className="f-display text-[14px] font-bold uppercase tracking-wide underline">
                   Άλλαξε
@@ -5025,12 +5124,6 @@ loadAppSettings().then(() => {
     </div>
 
     <div class="panel" id="goal-panel" hidden></div>
-
-    <div class="panel">
-      <h3>Επίπεδο</h3>
-      <p class="hint">Πόση εμπειρία έχεις με τα βάρη; Από αυτό αλλάζουν τα σετ, οι επαναλήψεις και η ένταση.</p>
-      <div class="level-pick" id="cfg-level"></div>
-    </div>
 
     <div class="panel">
       <h3>Μέρες την εβδομάδα</h3>
@@ -6929,6 +7022,7 @@ function __bootWorkout() {
       const other = (data && data.other) || '';
       return {
         primary: typeof (data && data.primary) === 'string' ? data.primary : '',
+        level: typeof (data && data.level) === 'string' ? data.level : '',
         goals: Array.isArray(data && data.goals) ? data.goals : [],
         custom: custom.length || !other ? custom : [other],
         other,
@@ -7166,15 +7260,43 @@ function __bootWorkout() {
       return null;
     }
 
-    /* Διπλή προοδευτικότητα: αν όλα τα σετ έπιασαν το πάνω όριο, ανέβασε βάρος. */
+    /* Διπλή προοδευτικότητα, με τρεις δυνατές αποφάσεις:
+       ανέβα  — όλα τα σετ έγιναν και έπιασαν το πάνω όριο,
+       ρίξε   — στα μισά σετ ή περισσότερα οι επαναλήψεις έπεσαν κάτω από το κάτω όριο,
+       μείνε  — οτιδήποτε ενδιάμεσα: ίδια κιλά, κυνηγάς επαναλήψεις. */
+    function verdict(ex, sets) {
+      const list = (sets || []).filter((x) => x && x.w != null);
+      if (!list.length) return null;
+      const top = Math.max(...list.map((x) => Number(x.w) || 0));
+      const complete = list.length >= ex.sets;
+      if (complete && list.every((x) => x.r >= ex.repMax)) {
+        return { action: 'up', weight: +(top + ex.step).toFixed(2) };
+      }
+      const low = list.filter((x) => x.r < ex.repMin).length;
+      if (low >= Math.ceil(ex.sets / 2) && top > 0) {
+        return { action: 'down', weight: +Math.max(0, top - ex.step).toFixed(2) };
+      }
+      return { action: 'stay', weight: top };
+    }
+
+    const VERDICT_WORD = { up: 'ανέβα', stay: 'μείνε', down: 'ρίξε' };
+    const VERDICT_ICON = { up: '↑', stay: '=', down: '↓' };
+
+    function verdictText(ex, v) {
+      const kg = ex.bodyweight
+        ? (v.weight > 0 ? `${num(v.weight)} kg επιβάρυνση` : 'χωρίς επιβάρυνση')
+        : `${num(v.weight)} kg`;
+      return v.weight > 0 || !ex.bodyweight
+        ? `${VERDICT_WORD[v.action]} στα ${kg}`
+        : `${VERDICT_WORD[v.action]} ${kg}`;
+    }
+
+    /* Η πρόταση για σήμερα βγαίνει από την προηγούμενη φορά. */
     function suggestion(ex) {
       const last = lastPerformance(ex.id);
-      if (!last) return { weight: null, levelUp: false };
-      const complete = last.sets.length >= ex.sets;
-      const allTop = last.sets.every((s) => s.r >= ex.repMax);
-      const topWeight = Math.max(...last.sets.map((s) => s.w));
-      if (complete && allTop) return { weight: +(topWeight + ex.step).toFixed(2), levelUp: true };
-      return { weight: topWeight, levelUp: false };
+      const v = last ? verdict(ex, last.sets) : null;
+      if (!v) return { weight: null, levelUp: false, action: null };
+      return { weight: v.weight, levelUp: v.action === 'up', action: v.action };
     }
 
     /* Ποια ημέρα προτείνεται σήμερα: η επόμενη στη ρότα μετά την τελευταία ολοκληρωμένη. */
@@ -7374,10 +7496,15 @@ function __bootWorkout() {
           chip.className = 'setchip';
           chip.dataset.filled = String(!!entry);
           chip.dataset.top = String(!!entry && entry.r >= ex.repMax);
-          chip.setAttribute('aria-label', `Σετ ${i + 1}`);
-          chip.innerHTML = entry
+          chip.setAttribute('aria-label', `Σετ ${i + 1}` +
+            (sug.action ? ` · πρόταση: ${verdictText(ex, sug)}` : ''));
+          const badge = sug.action
+            ? `<span class="sug-badge" data-act="${sug.action}" title="Πρόταση: ${esc(verdictText(ex, sug))}">` +
+              `${VERDICT_ICON[sug.action]} ${num(sug.weight)}</span>`
+            : '';
+          chip.innerHTML = badge + (entry
             ? `<span class="val">${num(entry.w)}${ex.bodyweight ? '' : ' kg'}</span><span class="sub">${entry.r} επαν.</span>`
-            : `<span class="val">—</span><span class="sub">σετ ${i + 1}</span>`;
+            : `<span class="val">—</span><span class="sub">σετ ${i + 1}</span>`);
           chip.addEventListener('click', () => {
             state.editing =
               state.editing && state.editing.exId === ex.id && state.editing.index === i
@@ -7395,19 +7522,29 @@ function __bootWorkout() {
           meta.textContent =
             `Τελευταία (${shortDate(last.date)}): ` +
             last.sets.map((s) => `${num(s.w)}×${s.r}`).join('  ·  ');
+          if (sug.action) {
+            const why = document.createElement('span');
+            why.className = 'ex-sug';
+            why.dataset.act = sug.action;
+            why.textContent = `Πρόταση για σήμερα: ${VERDICT_ICON[sug.action]} ${verdictText(ex, sug)}`;
+            meta.appendChild(why);
+          }
           card.appendChild(meta);
         }
 
-        if (allTop) {
+        /* Τέλος άσκησης: τι κάνεις την επόμενη φορά. */
+        const nextV = allDone ? verdict(ex, filled) : null;
+        if (nextV) {
           const note = document.createElement('div');
           note.className = 'levelup-note';
-          const next = +(Math.max(...filled.map((s) => s.w)) + ex.step).toFixed(2);
-          note.textContent = `Κλείδωσες όλα τα σετ στο πάνω όριο. Την επόμενη φορά ανέβα στα ${num(next)} kg.`;
-          card.appendChild(note);
-        } else if (sug.levelUp) {
-          const note = document.createElement('div');
-          note.className = 'levelup-note';
-          note.textContent = `Σήμερα ανέβα στα ${num(sug.weight)} kg.`;
+          note.dataset.act = nextV.action;
+          const txt = verdictText(ex, nextV);
+          note.textContent =
+            nextV.action === 'up'
+              ? `Κλείδωσες όλα τα σετ στο πάνω όριο. Την επόμενη φορά ${VERDICT_ICON.up} ${txt}.`
+              : nextV.action === 'down'
+                ? `Οι επαναλήψεις έπεσαν κάτω από ${ex.repMin} στα περισσότερα σετ. Την επόμενη φορά ${VERDICT_ICON.down} ${txt}.`
+                : `Καλή δουλειά. Την επόμενη φορά ${VERDICT_ICON.stay} ${txt} και πάλεψε για ${ex.repMax} επαναλήψεις σε όλα τα σετ.`;
           card.appendChild(note);
         }
 
@@ -7906,40 +8043,80 @@ function __bootWorkout() {
 
     /* ---------- Χρονόμετρο ξεκούρασης ---------- */
 
+    /* Μετράμε με βάση την ώρα λήξης και όχι αφαιρώντας 1 κάθε δευτερόλεπτο.
+       Όταν σβήνει η οθόνη ή η εφαρμογή πάει στο παρασκήνιο, το κινητό
+       παγώνει τα setInterval· έτσι ο χρόνος μένει πάντα σωστός. */
+    const TIMER_KEY = 'pb3-rest-timer';
     let timerId = null;
-    let timerLeft = 0;
+    let timerEnd = 0;
     let timerTotal = 0;
+    let timerShown = -1;
 
-    function startTimer(seconds, label) {
-      stopTimer();
-      timerTotal = seconds;
-      timerLeft = seconds;
-      $('#timer').hidden = false;
-      $('#timer-label').textContent = 'Ξεκούραση · ' + label;
-      paintTimer();
-      timerId = setInterval(() => {
-        timerLeft--;
-        if (timerLeft <= 0) {
-          if (navigator.vibrate) navigator.vibrate([180, 90, 180]);
-          stopTimer();
-          return;
-        }
-        paintTimer();
-      }, 1000);
+    function timerRemaining() {
+      return Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
     }
 
-    function paintTimer() {
-      const m = Math.floor(timerLeft / 60);
-      const s = String(timerLeft % 60).padStart(2, '0');
+    function startTimer(seconds, label, endAt) {
+      stopTimer();
+      timerTotal = seconds;
+      timerEnd = endAt || Date.now() + seconds * 1000;
+      timerShown = -1;
+      try {
+        localStorage.setItem(TIMER_KEY, JSON.stringify({ end: timerEnd, total: seconds, label }));
+      } catch (e) {}
+      $('#timer').hidden = false;
+      $('#timer-label').textContent = 'Ξεκούραση · ' + label;
+      tickTimer();
+      timerId = setInterval(tickTimer, 250);
+    }
+
+    function tickTimer() {
+      if (!timerId && timerEnd === 0) return;
+      const left = timerRemaining();
+      if (left <= 0) {
+        const late = Date.now() - timerEnd > 3000;
+        stopTimer();
+        if (!late && navigator.vibrate) navigator.vibrate([180, 90, 180]);
+        return;
+      }
+      if (left !== timerShown) {
+        timerShown = left;
+        paintTimer(left);
+      }
+    }
+
+    function paintTimer(left) {
+      const m = Math.floor(left / 60);
+      const s = String(left % 60).padStart(2, '0');
       $('#timer-count').textContent = `${m}:${s}`;
-      $('#timer-bar').style.width = (timerLeft / timerTotal) * 100 + '%';
+      $('#timer-bar').style.width = (timerTotal ? (left / timerTotal) * 100 : 0) + '%';
     }
 
     function stopTimer() {
       clearInterval(timerId);
       timerId = null;
+      timerEnd = 0;
+      timerShown = -1;
+      try { localStorage.removeItem(TIMER_KEY); } catch (e) {}
       $('#timer').hidden = true;
     }
+
+    /* Επιστροφή στην εφαρμογή: ενημέρωση αμέσως, χωρίς αναμονή. */
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && timerEnd) tickTimer();
+    });
+    window.addEventListener('pageshow', () => { if (timerEnd) tickTimer(); });
+
+    /* Αν το κινητό έκλεισε την εφαρμογή στη μέση της ξεκούρασης,
+       συνεχίζει από εκεί που έπρεπε να είναι. */
+    try {
+      const saved = JSON.parse(localStorage.getItem(TIMER_KEY) || 'null');
+      if (saved && saved.end > Date.now() && saved.total > 0) {
+        startTimer(saved.total, saved.label || '', saved.end);
+      } else if (saved) {
+        localStorage.removeItem(TIMER_KEY);
+      }
+    } catch (e) {}
 
     $('#timer-skip').addEventListener('click', stopTimer);
 
@@ -8554,12 +8731,17 @@ function __bootWorkout() {
       if (!data) return;
       GOALS = {
         primary: typeof data.primary === 'string' ? data.primary : '',
+        level: LEVELS[data.level] ? data.level : '',
         goals: Array.isArray(data.goals) ? data.goals : [],
         custom: Array.isArray(data.custom) ? data.custom : []
       };
 
+      /* Το επίπεδο διαλέγεται πια στις Ρυθμίσεις των κρατήσεων, μαζί με
+         τον στόχο. Χωρίς επιλογή εκεί μένει ό,τι είχε το καρνέ. */
+      const lvl = GOALS.level || state.plan.config.level || DEFAULT_LEVEL;
+
       const c = goalConfig();
-      if (!c) { renderConfig(); return; }
+      if (!c) { applyPlanConfig({ ...state.plan.config, level: lvl }); renderConfig(); return; }
 
       /* Το πρόγραμμα ακολουθεί πάντα τους στόχους. Οι μέρες μένουν όπως
          τις έχει διαλέξει ο πελάτης — την πρώτη φορά τις προτείνει το
@@ -8569,6 +8751,7 @@ function __bootWorkout() {
            αλλάζει μόνο ο στόχος. */
         applyPlanConfig({
           ...state.plan.config,
+          level: lvl,
           preset: c.preset,
           emphasis: [...c.emphasis],
           source: 'goals'
@@ -8580,7 +8763,7 @@ function __bootWorkout() {
       const days = first
         ? ((PRESETS[c.preset] || {}).days || 3)
         : currentDays();
-      applyPlanConfig(configFor(days));
+      applyPlanConfig({ ...configFor(days), level: lvl });
       renderConfig();
     }
 
@@ -8627,7 +8810,7 @@ function __bootWorkout() {
         (food.hint ? `<p class="hint"><strong>Διατροφή.</strong> ${esc(food.hint)} Πρωτεΐνη ${(food.range || [1.6, 2.2]).join('–')} g/kg.</p>` : '') +
         (b.phase ? `<p class="hint"><strong>Διάρκεια.</strong> ${esc(b.phase)}</p>` : '') +
         (p.note ? `<div class="warn">${esc(p.note)}</div>` : '') +
-        `<p class="hint">Τον στόχο τον αλλάζεις από τις Ρυθμίσεις της εφαρμογής κρατήσεων.</p>` +
+        `<p class="hint">Τον στόχο και το επίπεδο τα αλλάζεις από τις Ρυθμίσεις της εφαρμογής κρατήσεων.</p>` +
         `</div></details>`;
       $('details', host).addEventListener('toggle', (e) => { goalPanelOpen = e.target.open; });
     }
@@ -9556,6 +9739,9 @@ function __bootWorkout() {
     /* Οι στόχοι του πελάτη, από τη βάση. Αργούν λίγο — η οθόνη είναι
        ήδη στημένη και απλώς ενημερώνεται όταν έρθουν. */
     loadGoals();
+    /* Όταν ο πελάτης αλλάξει στόχο ή επίπεδο στις κρατήσεις, το καρνέ
+       ξαναδιαβάζει χωρίς να χρειαστεί επανεκκίνηση. */
+    window.__workoutReloadGoals = loadGoals;
 
     /* Πρώτος γύρος συγχρονισμού μόλις σταθεί η οθόνη. */
     store.syncNow();
@@ -9606,6 +9792,7 @@ function __bootWorkout() {
     if (themeMeta) themeMeta.setAttribute("content", "#0a0a0a");
     clientTitle = document.title;
     window.scrollTo(0, 0);
+    if (loaded && window.__workoutReloadGoals) window.__workoutReloadGoals();
     load();
   }
 
